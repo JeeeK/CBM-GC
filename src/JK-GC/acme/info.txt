@@ -1,0 +1,57 @@
+Super Garbage Collection - HypraAss Source
+==========================================
+1985-2020 J. E. Klasek j klasek.at
+
+ACME source version, documented in german.
+Based on HypraAss' version from 1985-12-27
+
+The Super GC Version 1.1
+
+
+Prerequisites
+-------------
+
+acme			ACME cross-assembler executable 
+			at least in version 0.96.4 with report option -r
+
+
+Files
+-----
+
+Makefile		assemble the program
+info.txt		this file
+jk-gc.asm		assembler source for ACME
+jk-gc.l			list output of ACME assembler run
+jk-gc.o			code (binary)
+jk-gc.r			report output of ACME assembler run
+supergc-1985corr.prg	descriptive name as link for jk-gc.o
+
+
+
+Original version
+----------------
+
+
+derived from the 1985 HypraAss source:
+
+../../../tools/hacat -n ../hypraass/s-gc-8-dok.prg
+
+
+
+Assembling with ACME
+--------------------
+
+2011-02-28 JK
+
+Source with ACME assembler-syntax: jk-gc.asm 
+
+Typical adapations:
+
+ * "ASL A"  -> "ASL"
+ * .BYTE -> !byte
+ * !to "jk-gc.o", cbm
+   ; set output file and format (has to placed right after the
+   ; setup of the program counter)
+
+
+
