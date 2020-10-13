@@ -1,0 +1,55 @@
+Super Garbage Collection - HypraAss Source
+==========================================
+1985-2020 J. E. Klasek j klasek.at
+
+HypraAss Source version: 8, documented in german
+from 1985-12-27
+
+Corresponds to Super GC Version 1.1
+
+
+Prerequisites
+-------------
+
+petcat			Tool from the emulator VICE.
+
+
+
+Files
+-----
+
+Makefile		create the .asm version
+
+info.txt		this file
+
+c-gc-8.prg		code (binary), 
+			start address $CDFE, length $211 bytes
+
+l-gc-8-dok		list output from the HypraAss assembler
+
+l-gc-8-dok.bas		list output converted with petcat into ASCII
+
+s-gc-8-dok.asm		assembler source with the tool "hacat" (see tools
+			directory) derived from s-gc-8-dok.prg (giving
+			a ASCII soure without line numbers), but still
+			with HypraAss directives.
+			To be created with Makefile.
+
+s-gc-8-dok.prg		assembler source file in HypraAss format
+			(must be loaded into the HypraAss Editor
+			to show, edit or assemble it)
+
+
+
+Procedures
+----------
+
+### create the .asm version
+
+make
+
+# or manually
+
+hacat -n s-gc-8-dok.prg > s-gc-8-doc.asm
+
+
