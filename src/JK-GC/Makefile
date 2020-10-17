@@ -1,6 +1,6 @@
 #
 # Makefile Super Garbage Collection
-# 1985-2020 J. E. Klasek j klasek.at
+# 1985-2019 J. E. Klasek j klasek.at
 #
 # ACME cross-assembler environment
 #
@@ -14,7 +14,7 @@ F=jk-gc
 
 all: jk-gc.o
 
-$(F).o: $(F).asm
+$(F).o: $(F).asm debug.asm
 	acme -v3 -l $(F).l -r $(F).r $(F).asm
 
 clean:
