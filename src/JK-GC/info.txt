@@ -1,8 +1,19 @@
 Super Garbage Collection - HypraAss Source
 ==========================================
-1985-2013 J. E. Klasek j klasek.at
+1985-2016 J. E. Klasek j klasek.at
 
-The Super GC Version 1.1 with corrected comments (german).
+
+The Super GC Version 2.0 2013-11-24. Vastly optimized, but with two
+severe bugs:
+
+1. String Descriptor Stack (SDS) bug:
+   The GC might hang in while processing the SDS in the case the SDS
+   contains a non-empty string!
+
+2. The reserved buffer space of 256 bytes is missing. This was a bug
+   from SuperGC V1.1 in HypraAss version 1.1, which has been already
+   fixed, but was reintroduced because the fix wasn't commented.
+
 
 ACME source version, with german comments.
 Based on HypraAss' version from 1985-12-27
