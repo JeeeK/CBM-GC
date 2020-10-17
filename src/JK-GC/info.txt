@@ -24,9 +24,18 @@ version was used from 1985 on.
 		2. Buffer reserved space of 256 bytes are missing.
 		This version was only in use in a monitor-patched
 		variant, which fixed this bugs.
+		According to the soure code the start address is at
+		$C500. The commonly used version is the patched
+		version moved to $CDEF, but accidentally ends
+		at location $D000 which will be currupted!
+		It was intented that $CFFF should be the end address,
+		but only 5 bytes are reserved instead of 6.
 	ACME: bugs fixed: (path acme/)
 		The zero-page location save part with initialisation of
-		FLAG from line 1105 to 1120 moved before the first use.
+		FLAG from line 1105 to 1120 has been moved right before
+		the first use. 
+		The curruption of $D000 will be prevented (destroying
+		the sprite 0 X position register).
 
 2013-11-24 VERS. 2.0	Vastly optimized, but with two severe bugs:
 	1. String Descriptor Stack (SDS) bug:
@@ -51,6 +60,11 @@ version was used from 1985 on.
 	6. Clearer structuring of the array processing.
 
 
+	A set debugging option maps the buffer into a hires screen while
+	the GC is running.
+	See chapter Debugging below.
+
+
 
 Prerequisites
 -------------
@@ -63,6 +77,8 @@ Files
 -----
 
 Makefile		assemble the program
+debug.asm		optional debugging module, which maps
+			the GC buffer into the hires screen.
 info.txt		this file
 jk-gc.asm		assembler source for ACME
 jk-gc.l			list output of ACME assembler run
@@ -80,6 +96,20 @@ Original version
 derived from the 1985 HypraAss source:
 
 ../../../tools/hacat -n ../hypraass/s-gc-8-dok.prg
+
+
+
+Debugging
+---------
+
+Since Version 2.1 the source code contains the option "debug" which
+graphically displays the fillup of the GC buffer in the RAM underneath
+the KERNAL. This function takes some time because on each call of the GC
+the graphic screen is cleared in conjunction with a artifical delay
+which allows the user to look at the resulting graphic.
+
+With this activiated option (remove the comment) the source "debug.asm"
+is included.
 
 
 
