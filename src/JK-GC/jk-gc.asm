@@ -5,76 +5,77 @@
 ;
 ; *************************
 ; *  GARBAGE  COLLECTION  *
-; *   VON JOHANN KLASEK   *
+; *   von Johann Klasek   *
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
+; * 2019-02-15 VERS. 2.1  *
 ; *************************
 ;
-; AUFRUF: SYS ...
-; RÄUMT STRINGSPEICHER AUF
-; ES WERDEN NUR JENE SPEICHERSTELLEN
-; BENUTZT, DIE AUCH DIE NORMALE
-; GC VERWENDET; ALLE ANDEREN
-; WERDEN WIEDER RESTAURIERT.
+; Aufruf: SYS ...
+; Räumt Stringspeicher auf
+; Es werden nur jene Speicherstellen
+; benutzt, die auch die normale
+; GC verwendet; alle anderen
+; werden wieder restauriert.
 
-; BASIC SYSTEMVARIABLEN
+; BASIC Systemvariablen
 
-TOSS     = $19		; TOP OF STRINGSTACK
-EOSS     = $22		; END OF STRINGSTACK +1
-TSSP     = $16		; TEMP. STRINGSTACK POINTER
+TOSS     = $19		; Top of Stringstack
+EOSS     = $22		; End of Stringstack +1
+TSSP     = $16		; Temp. Stringstack Pointer
 
-VARTAB   = $2D		; Basicprogrammende = Variablenanfang
+VARTAB   = $2D		; BASIC-Programmende = Variablenanfang
 ARYTAB   = $2F		; Variablenende = Arraybereichanfang
-STREND   = $31		; Arraybereichende = unterste Stringheap-Adresse
-FRETOP   = $33		; aktuelle Stringheap-Adresse
-MEMSIZ   = $37		; höchste RAM-Adresse für Basic, Start
-			; des nach unten wachsenden Stringheaps
-MEMBEG   = STREND	; MEMORY BEGINN = STREND
-MEMEND   = MEMSIZ	; MEMORY END
+STREND   = $31		; Arraybereichende = unterste String-Heap-Adresse
+FRETOP   = $33		; aktuelle String-Heap-Adresse
+MEMSIZ   = $37		; höchste RAM-Adresse für BASIC, Start
+			; des nach unten wachsenden String-Heaps
+MEMBEG   = STREND	; Memory begin = STREND
+MEMEND   = MEMSIZ	; Memory end
 
-; VARIABLEN
+; Variablen
 
-STRPTR   = FRETOP	; STRING POINTER = FRETOP
-STRDP    = $22		; STRING DESCRIPTOR ADDRESS
-BERANF   = $4C		; BEREICHSANFANG
-NEWPTR	 = $4E		; NEUER STRING POINTER
-PTR      = $50		; ARRAY POINTER
-LEN      = $52		; STRING LENGTH
-FLAG     = $53		; ENDE-FLAG
-; $54-$56 BELEGT
-STAT     = $57		; STRING STATE
+STRPTR   = FRETOP	; String-Pointer = FRETOP
+STRDP    = $22		; String-Descriptor-Address
+BERANF   = $4C		; Bereichsanfang
+NEWPTR	 = $4E		; Neuer String-Pointer
+PTR      = $50		; Array-Pointer
+LEN      = $52		; String-Length
+; $54-$56 belegt
+STAT     = $57		; String-State
 ; $58-5B wird von MOVBLOCK zerstört!
-STRADR   = $58		; STRING ADDRESS (TEMP.)
-BEREND   = $5D		; BEREICHSENDE
-BUFPTR   = $5F		; BUFFER POINTER
-			; (MOVBLOCK: QUELLBLOCKANFANG!)
+STRADR   = $58		; String-Address (temp.)
+BEREND   = $5D		; Bereichsende
+BUFPTR   = $5F		; Buffer-Pointer
+			; (MOVBLOCK: Quellblockanfang!)
 
-CPTR     = $22		; POINTER FÜR INSTALL-ROUTINE
+CPTR     = $22		; Pointer für Install-Routine
 
-; ZU RETTENDER ZEROPAGE-BEREICH
+; zu rettender Zeropage-Bereich
 ZPSTART  = $4C		; 1. zu rettende
-ZPEND    = $53		; letzte zu rettende
+ZPEND    = $52		; letzte zu rettende Stelle
 ZPLEN    = ZPEND-ZPSTART+1
-			; Anzahl zu rettende
+			; Anzahl zu rettenden Bytes
 
-; KONSTANTEN
+; Konstanten
 
-STAT_SDS = 5
-STAT_VAR = 3
-STAT_ARY = 1
+; für Variabe STAT (String State):
+STAT_SDS = 5		; String-Descriptor-Stack
+STAT_VAR = 3		; einfache Variablen
+STAT_ARY = 1		; Array
 
 
-; SPEICHERORTE
+; Speicherorte
 
-GARBCOL  = $B526	; Einsprungpunkt GC
+GARBCOL  = $B526	; Einsprungpunkt der GC
 
 MOVBLOCK = $A3BF	; Block verschieben
 			; zerstört $58/$59/$5A/$5B/$22
 
 BASIC    = $A000        ; BASIC-ROM
 KERNAL   = $E000        ; KERNAL-ROM
-ROMSIZE  = $2000        ; ROM-Länge 8k
-BUF	 = KERNAL	; Puffer unter Kernal
+ROMSIZE  = $2000        ; ROM-Länge 8 KByte8
+BUF	 = KERNAL	; Puffer unter KERNAL
 BUFSIZE  = ROMSIZE	; Puffergröße
 
 ; I/O-BEREICHE/-ADRESSEN
@@ -84,120 +85,154 @@ COLBASE  = $D800	; Color RAM
 
 MARKE    = "*"		; Aktivitätsanzeige
 MARKEFARBE = 9		; rot
-MARKEOFF = 40*25-1	; Markeposition
+MARKEOFF = 40*25-1	; Markenposition
 MARKEVID = VIDBASE+MARKEOFF
 MARKECOL = COLBASE+MARKEOFF
 
-PROZPORT = $01          ; Prozessorport
-MEMROM = %00110111      ; Basic+Kernal ROM, $37
-MEMBAS = %00110110      ; Basic RAM+Kernal ROM, $34
-MEMRAM = %00110101      ; Basic+Kernal RAM, $35
+PROZPORT = $01		; Prozessorport
+MEMROM   = %00110111	; Basic+Kernal ROM, $37
+MEMBAS   = %00110110	; Basic RAM+Kernal ROM, $34
+MEMRAM   = %00110101	; Basic+Kernal RAM, $35
 
+
+; Debugging
+
+;!set debug=1
 
 
 ; Installer
 
 INSTALL
+	; BASIC ins RAM kopieren, um die GC-Routine
+	; zu patchen ...
 	LDA #MEMROM
-	STA PROZPORT	; ALLES ROM
-	LDY #<BASIC	; ROM-BEGINN
+	STA PROZPORT	; alles ROM (also vom ROM kopieren)
+	LDY #<BASIC	; ROM-Beginn
 	STY CPTR
 	LDA #>BASIC
-	STA CPTR+1	; BASIC-ROM ANFANG
-	LDX #>($2000)	; BASIC-ROM LÄNGE
-CPYROM	LDA (CPTR),Y	; ROM LESEN
-	STA (CPTR),Y	; RAM SCHREIBEN
+	STA CPTR+1	; BASIC-ROM Anfang
+	LDX #>($2000)	; BASIC-ROM Länge in Pages
+CPYROM	LDA (CPTR),Y	; ROM lesen
+	STA (CPTR),Y	; RAM schreiben
 	INY
 	BNE CPYROM
-	INC CPTR+1	; NÄCHSTE PAGE
-	DEX
+	INC CPTR+1	; nächste Page
+	DEX		; Page-Zähler
 	BNE CPYROM
-	LDA PROZPORT
-	AND #%11111110	; BASIC-ROM AUS MASKE
+	LDA PROZPORT	; auf RAM umschalten
+	AND #%11111110	; "BASIC-ROM aus"-Maske
 	STA PROZPORT
-	LDA #<COLLECT	; JMP COLLECT
-	STA GARBCOL+1	; PATCHEN ...
+	LDA #<COLLECT	; "JMP COLLECT"
+	STA GARBCOL+1	; patchen ...
 	LDA #>COLLECT
 	STA GARBCOL+2
-	LDA #$4C	; JMP OPCODE
+	LDA #$4C	; JMP-Opcode
 	STA GARBCOL
 	RTS
+
+!ifdef debug {
+!source "debug.asm"
+}
 
 ; *** Garbage Collector
 
 COLLECT
-	LDA MARKEVID	; KONTROLLANZEIGE BILDSCHIRM
+!ifdef debug {
+	JSR gra_on
+}
+	LDA MARKEVID	; Kontrollanzeige Bildschirm
 	STA ORIGVID
 	LDA #MARKE
-	STA MARKEVID	; MARKE ZEICHEN
-	LDA MARKECOL
+	STA MARKEVID	; Marke: Zeichen
+	LDA MARKECOL	; sichern
 	STA ORIGCOL
 	LDA #MARKEFARBE
-	STA MARKECOL	; MARKE FARBE
+	STA MARKECOL	; Marke: Farbe sichern
 
-	LDX #ZPLEN	; ZEROPAGE-REG.
-SAVLOOP	LDA ZPSTART-1,X	; RETTEN
+	LDX #ZPLEN	; Zeropage-Reg.
+SAVLOOP	LDA ZPSTART-1,X	; retten
 	STA SAVE-1,X
 	DEX
 	BNE SAVLOOP
 
-	STX FLAG	; ENDEFLAG=0 (NEIN)
-	LDA MEMEND	; STRING POINTER
-	LDX MEMEND+1	; UND BEREICHANFANG 
-	STA STRPTR	; AUF SPEICHERENDE
-	STX STRPTR+1	; SETZEN
+	LDA MEMEND	; String-Pointer
+	LDX MEMEND+1	; und Bereichanfang 
+	STA STRPTR	; auf Speicherende
+	STX STRPTR+1	; setzen.
 	STA BERANF
 	STX BERANF+1
 
-; *** Bereiche
+; *** Nächster zu betrachtender Bereich am String-Heap
+
+;                        STRADR
+;       +-------------------------------------+
+;       |                                     |
+;       |                                     V
+;   +-+-+-+      +-----------------------+----------+------+------------+
+;   |L|PTR|      |      noch nicht       | gesuchte | frei | behandelte |
+;   | |   |      |  behandelte Strings   | Strings  |      |   Strings  |
+;   +-+-+-+      +-----------------------+----------+------+------------+
+;    ^            ^                       ^          ^      ^            ^
+;    |            |                       |          |      |            |
+;    STRDP        STREND                  BERANF     BEREND STRPTR       MEMSIZ
+;                                                           =FRETOP
+;   SDS,VAR,ARY  |<-------------------- String-Heap -------------------->|
+;
+; Der Bereich BERANF bis BEREND (gesuchte Strings) ist immer um 256 Bytes 
+; kleiner als der Pufferbereich, da am Ende des Bereichs ein String beginnen
+; könnte, der max. 254 Bytes das Bereichsende überragen könnte. Dieser 
+; "Überhang" muss im Puffer Platz haben und dort reserviert sein!
 
 NEXTBLOCK
-	LDA STRPTR	; NEWPTR PARALLEL MIT
-	STA NEWPTR	; BUFPTR MITZIEHEN ...
+	LDA STRPTR	; NEWPTR parallel mit
+	STA NEWPTR	; BUFPTR mitziehen ...
 	LDA STRPTR+1
 	STA NEWPTR+1
-	LDX BERANF
-	LDA BERANF+1	; BEREICH
-	STX BEREND	; UM PUFFERLÄNGE
-	STA BEREND+1	; NACH UNTEN VERLEGEN
-	SEC
-	SBC #(>BUFSIZE)
-			; -1 PAGE XXX
-	BCC LASTRANGE	; <0 (ALSO <STREND)
+	LDX BERANF	; Bereich war zuletzt
+	LDA BERANF+1	; String-Heap-Ende?
+	CPX STREND
+	BNE +
+	CMP STREND+1
+	BEQ EXIT	; ja -> fertig
+
++	STX BEREND	; um Pufferlänge - 256
+	STA BEREND+1	; nach unten verlegen.
+	SEC		
+	SBC #(>BUFSIZE-1) ; Bereichslänge in Pages,
+			; kann um 254 Bytes überragt werden!
+	BCC LASTRANGE	; < 0 = Unterlauf (also auch <STREND)
 	STA BERANF+1
-	CPX STREND	; STRINGS ENDE
-	SBC STREND+1	; ERREICHT?
-	BCS STRINRANGE
+	CPX STREND	; Ende des String-Heaps erreicht?
+	SBC STREND+1
+	BCS STRINRANGE	; Bereichsanfang >= String-Heap-Ende
 LASTRANGE
-	INC FLAG	; JA, ENDEFLAG SETZEN
-	LDA STREND	; BEREICHANFANG =
-	LDX STREND+1	; SPEICHERANFANG
-	STA BERANF	; BEREICHANFANG = BEREICHENDE
-	STX BERANF+1	; (SONDERFALL)
+	LDA STREND	; Bereichanfang =
+	LDX STREND+1	; Speicheranfang (String-Heap-Ende)
+	STA BERANF	; 
+	STX BERANF+1	; 
+	BNE STRINRANGE	; immer, weil High-Byte >0
 
-	CMP BEREND	; -> BEREICH IST 0 BYTE LANG
-	BNE STRINRANGE	; -> FERTIG
-	CPX BEREND+1
-	BNE STRINRANGE
 
-CHECKEND
-	LDA FLAG	; ENDFLAG GESETZT?
-	BEQ NEXTBLOCK	; NÄCHSTEN BEREICH UNTERSUCHEN
+; *** Ende der Garbage Collection
 
-; *** Ende
-
-	LDX #ZPLEN	; ZEROPAGE-REG.
-RESLOOP	LDA SAVE-1,X
-	STA ZPSTART-1,X	; RESTAURIEREN
+EXIT
+	LDX #ZPLEN
+RESLOOP	LDA SAVE-1,X	; Zeropage-Reg.
+	STA ZPSTART-1,X	; restaurieren.
 	DEX
 	BNE RESLOOP
 
-	LDA ORIGVID	; KONTROLLANZEIGE LÖSCH
-	STA MARKEVID	; UND ALTEN ZUSTAND WIEDER HERSTELLEN
-	LDA ORIGCOL
+	LDA ORIGVID	; Kontrollanzeige löschen
+	STA MARKEVID	; und alten Zustand wieder
+	LDA ORIGCOL	; herstellen.
 	STA MARKECOL
-
+!ifdef debug {
+	JSR gra_off
+}
 	RTS
+
+
+; *** Bereich durchgehen
 
 STRINRANGE
 !if ((BUF+BUFSIZE) and $FFFF) != 0  {
@@ -206,80 +241,93 @@ STRINRANGE
 	LDA #<(BUF+BUFSIZE)
 	STA BUFPTR
 } else {
-	LDA #0		; BUFFERPOINTER AUF
+			; Sonderfall Pufferende bei $FFFF
+	LDA #0		; Buffer-Pointer auf
 	STA BUFPTR	; $10000 (65536) = 0
-	STA BUFPTR+1	; SETZEN.
+	STA BUFPTR+1	; setzen.
 }
 	SEC
-	!byte $24	; BIT ZP, NÄCHSTEN BEFEHL IGNORIEREN
+	!byte $24	; BIT ZP, d.h. nächsten Befehl ignorieren!
 NEXTSTR	
 	CLC
 NEXTSTR1
-	JSR GETSA	; NÄCHSTE STRINGADRESSE HOLEN
-	LDA LEN		; WENN 0, DANN
-	BEQ WEITER	; KEINEN STRING MEHR GEFUNDEN!
+	JSR GETSA	; Nächste String-Adresse holen.
+	BEQ COPYBACK	; keinen String mehr gefunden!
 
-	TYA		; HIGH BYTE
-	CPX BEREND
-	SBC BEREND+1	; ÜBER BEREICH
-	BCS NEXTSTR	; NÄCHSTER STRING!
-	TYA		; HIGH BYTE
-	CPX BERANF
-	SBC BERANF+1	; UNTER BEREICH
-	BCC NEXTSTR1	; NÄCHSTER STRING!
+	TYA		; high Byte
+	CPX BEREND	; X/A >= BEREND:
+	SBC BEREND+1	; oberhalb des Bereichs, dann
+	BCS NEXTSTR	; nächster String!
 
-	LDA BUFPTR	; STRINGLÄNGE VERSCHIEBEN
-	SBC LEN
-	STA BUFPTR
-	BCS L4
-	DEC BUFPTR+1
+	TYA		; high Byte
+	CPX BERANF	; X/A < BERANF:
+	SBC BERANF+1	; unterhalb des Bereichs, dann
+	BCC NEXTSTR1	; nächster String!
+			; Innerhalb des Bereichs:
+	LDA BUFPTR	; Pufferzeiger um
+	SBC LEN		; String-Länge nach unten
+	STA BUFPTR	; setzen.
+	BCS +
+	DEC BUFPTR+1	; Überlauf High-Byte
 
-L4	STY STRADR+1	; STRINGADRESSE ABSPEICHERN
-	STX STRADR
++	STY STRADR+1	; String-Adresse abspeichern
+	STX STRADR	; für Kopieraktion.
 
-	LDY LEN
-	DEY
-	BEQ LEN1
-NEXTBYT	LDA (STRADR),Y	; STRING IN DEN BUFFERBEREICH
-	STA (BUFPTR),Y	; ÜBERTRAGEN
-	DEY
+	LDY LEN		; String-Länge (> 0)
+	BNE NBENTRY	; immer, mit Dekrement beginnen!
+NEXTBYT	LDA (STRADR),Y	; String in den Pufferbereich
+	STA (BUFPTR),Y	; übertragen, ROM ist aktiv
+NBENTRY	DEY		; schreibt ins RAM unters ROM!
 	BNE NEXTBYT
 LEN1
-	LDA (STRADR),Y	; DAS 0. BYTE EXTRA
-	STA (BUFPTR),Y	; 
+	LDA (STRADR),Y	; Das 0. Byte extra
+	STA (BUFPTR),Y	; übertragen
 
-	SEC		; NEUE STRINGADRESSE BERECHNEN!
-	LDA NEWPTR
-	SBC LEN
-	STA NEWPTR
-	BCS L5
-	DEC NEWPTR+1
-L5
-	JSR CORR	; STRINGADRESSE IN DESCRIPTOR ÄNDERN
-			; Z=0
-	BNE NEXTSTR	; UNBEDINGT, NÄCHSTER STRING
+	SEC		; Neue String-Adresse:
+	LDA NEWPTR	; Einfach den Pointer
+	SBC LEN		; mitziehen, ebenso um
+	STA NEWPTR	; String-Länge nach unten
+	BCS +		; setzen.
+	DEC NEWPTR+1	; Überlauf High-Byte
++
+	JSR CORR	; String-Adresse in Descriptor ändern.
+			; Immmer Z=0,
+	BNE NEXTSTR	; zum nächsten String.
 
-WEITER	
+
+; *** Pufferinhalt wieder zurück auf String-Heap
+
+; 0 ------------------------------------------- FFFF	
+;        Ziel                        Quelle
+;          +--------------------------+
+;          |                          |
+;          V                         /^\
+;     |||||||||||                |||||||||||
+;     ^          ^               ^          ^ 
+;     NEWPTR     STRPTR          BUFPTR     (BUF+BUFSIZE)
+
+COPYBACK
 !if ((BUF+BUFSIZE) and $FFFF) != 0  {
-	LDA BUFPTR	; BUFFER LEER ...
+	LDA BUFPTR	; Puffer leer ...
 	CMP #<(BUF+BUFSIZE)
-	BNE WEITER1
-	LDA BUFPTR+1	; WENN PTR AM ENDE
+	BNE +
+	LDA BUFPTR+1	; Wenn Pointer am Ende ...
 	CMP #>(BUF+BUFSIZE)
-	BEQ CHECKEND
-WEITER1
+	BEQ NOCOPY	; ist der Puffer leer, ev. nächster
++			; Bereich ...
 } else {
-	LDA BUFPTR	; BUFFER LEER
-	ORA BUFPTR+1	; WENN PTR =0 (ENDE)
-	BEQ CHECKEND
+			; Sonderfall: Pufferende bei $FFFF
+	LDA BUFPTR	; Puffer leer,
+	ORA BUFPTR+1	; wenn Pointer =0 (Ende)
+	BEQ NOCOPY	; War es letzter Bereich?
 }
 
 	LDA STRPTR
-	STA $58		; ZIELBLOCKENDE+1
+	STA $58		; Zielblockende+1
 	LDA STRPTR+1
 	STA $59
 	LDA NEWPTR
-	STA STRPTR	; NEUES FRETOP
+	STA STRPTR	; neues FRETOP
 	LDA NEWPTR+1	
 	STA STRPTR+1
 
@@ -289,205 +337,216 @@ WEITER1
 	LDA #>(BUF+BUFSIZE)
 	STA $5B
 } else {
-	LDA #$00	; QUELLBLOCKENDE+1
+			; Sonderfall Pufferende bei $FFFF
+	LDA #$00	; Quellblockende+1
 	STA $5A
 	STA $5B
 }
-			; QUELLBOCKANFANG = BUFPTR
+			; Quellbockanfang = BUFPTR
 
-	SEI		; BETRIEBSSYS.-ROM
-	LDA PROZPORT	; WEGBLENDEN
-	PHA		; DAMIT RAM ZUGÄNGLICH
-	LDA #MEMRAM	; WIRD
-
+	SEI		; keine Interrupts zulassen, wegen
+	LDA PROZPORT	; KERNAL-ROM wegblenden
+	PHA		; damit das Puffer-RAM zugänglich
+	LDA #MEMRAM	; wird!
 	STA PROZPORT
 
-	JSR MOVBLOCK	; BASIC-ROUTINE BLOCKVERSCHIEBEN
+	JSR MOVBLOCK	; BASIC-Routine Blockverschieben
 			; Z=1
-	PLA		; URSPRÜNGLICHER ZUSTAND
-	STA PROZPORT	; KERNAL-ROM WIEDER AKTIVIEREN
+	PLA		; ursprünglicher Zustand
+	STA PROZPORT	; KERNAL-ROM wieder aktivieren
 	CLI
-	JMP CHECKEND	; IMMER
+NOCOPY
+	JMP NEXTBLOCK	; nächsten Bereich
 
 
 ;
-; GETSA: ( C, STRDP -> STRDP, LEN, X, Y )
+; *** Get String - nächsten String mit Länge ungleich 0
 ;
+; ( C-Flag, STAT, STRDP -> STRDP, LEN, STAT, X, Y, Z-Flag )
+;
+; Bei C=1 wird beim SDS gestartet, sonst von der letzten
+; Position gemäß STRDP und String-Status STAT.
+; Das Z-Flag ist gesetzt, wenn kein String mehr
+; vorhanden ist, sonst in X/Y die Adresse und in LEN
+; die Stringlänge.
 
-GETSA	BCC CHECKTYPE	; C=0 -> NÄCHSTEN STRING
+GETSA	BCC CHECKTYPE	; C=0 -> nächsten String laut STAT
+			; sonst Start bei SDS ...
 
-; *** STRING DESCRIPTOR STACK (SDS)
-
-;         belegt->|<-frei
+; *** String-Descriptor-Stack (SDS): TOSS bis TSSP
+;
 ;    +-------------+
 ;    |             V
+;    |    belegt->|<-frei
 ;   +-+     +-----+-----+-----+
 ;   | |     |S|L|H|S|L|H|S|L|H|
 ;   +-+     +-----+-----+-----+
 ;    ^       ^     ^     ^     ^
-;    $16     $19   $1C   $1F   $21
+;    $16     $19   $1C   $1F   $22
 ;    TSSP    TOSS
-;
+
 DESCSTACK
 	LDY #0
-	STY STRDP+1	; DESCRIPTOR AUF
-	LDA #TOSS	; SDS
-	STA STRDP
-	LDX #STAT_SDS
-	STX STAT
-	BNE ISDSTEND	; IMMER
-DSTACK	CLC
-	LDA STRDP
-NEXTDST	ADC #3
+	STY STRDP+1	; Descriptor auf
+	LDA #STAT_SDS	; Status: SDS
+	STA STAT
+	LDX #TOSS	; SDS Start
+	BNE ISDSTEND	; immer verzweigen
+DSTACK	LDX STRDP
+NEXTDST	INX		; nächster Descriptor
+	INX
+	INX
 ISDSTEND
-	CMP TSSP	; STACK DURCH?
+	CPX TSSP	; Stack durch?
 	BEQ VARS
-	TAX
-	LDY 0,X
+	LDA 0,X		; String-Länge
 	BEQ NEXTDST
-	STY LEN
-	LDA 2,X		; STRINGADR. HIGH
+	STA LEN		; Rückgabevariable
+	STX STRDP	; festhalten
+	LDA 2,X		; String-Adr. high
 	TAY
-	LDA 1,X		; STRINGADR. LOW
+	LDA 1,X		; String-Adr. low
 	TAX
-	RTS
+	TYA		; immer ungleich 0, Z=0
+	RTS		; Adresse in X/Y retour
 
-; *** VARIABLEN
+; *** Variablen: VARTAB bis ARYTAB
 
-VARS	LDA VARTAB	; VARIABLENANFANG
+VARS	LDA VARTAB	; Variablenanfang
 	LDX VARTAB+1
 	STA STRDP
 	STX STRDP+1
-	LDA STRDP
-	LDY #STAT_VAR	; STATUS: EINFACHE VARIABLEN
+	LDY #STAT_VAR	; Status: einfache Variablen
 	STY STAT
-	BNE ISVAREND
+	BNE ISVAREND	; immer verzweigen
 VAR
-NEXTVAR	CLC		; NÄCHSTE VARIABLE
+NEXTVAR	CLC		; nächste Variable
 	LDA STRDP
-	ADC #7		; VARIABLENLÄNGE
+	ADC #7		; Variablenlänge
 	STA STRDP
 	BCC ISVAREND
-	INC STRDP+1
+	INC STRDP+1	; Überlauf High-Byte
 ISVAREND
 	CMP ARYTAB
 	BNE CHECKVAR
-	LDX STRDP+1	; VAR-ENDE (=ARRAY-ANFANG)?
+	LDX STRDP+1	; Var.-Ende (=Array-Anfang)?
 	CPX ARYTAB+1
-	BEQ ARRAYS	; VAR.-ENDE, WEITER MIT ARRAYS
+	BEQ ARRAYS	; Var.-Ende, weiter mit Arrays
 CHECKVAR
-	LDY #0		; VARIABLENNAME
-	LDA (STRDP),Y	; 1. ZEICHEN
-	BMI NEXTVAR	; KEIN STRING, NÄCHSTE V.
+	LDY #0		; Variablenname
+	LDA (STRDP),Y	; 1. Zeichen, Typ in Bit 7 
+	BMI NEXTVAR	; kein String, nächste V.
 	INY
-	LDA (STRDP),Y
-	BPL NEXTVAR	; KEIN STRING, NÄCHSTE V.
+	LDA (STRDP),Y	; 2. Zeichen, Typ in Bit 7
+	BPL NEXTVAR	; kein String, nächste V.
 	INY
-	LDA (STRDP),Y	; STRINGLÄNGE
-	BEQ NEXTVAR	; = 0, NÄCHSTE V.
-	STA LEN
+	LDA (STRDP),Y	; String-Länge
+	BEQ NEXTVAR	; = 0, Nächste Variable
+	STA LEN		; Rückgabevariable
 	INY
-	LDA (STRDP),Y	; ADRESSE LOW
+	LDA (STRDP),Y	; String-Adresse low
 	TAX
 	INY
-	LDA (STRDP),Y	; ADRESSE HIGH
-	TAY
-	RTS
+	LDA (STRDP),Y	; String-Adresse high
+	TAY		; immer ungleich 0, Z=0
+	RTS		; Adresse in X/Y retour
 
 CHECKTYPE
-	LDA STAT	; GETSA FORTSETZUNGSEINSTIEG
-	CMP #STAT_VAR	; STATUS STRING?
-	BCC ARRAY	; =1 -> ARRAY
-	BEQ VAR		; =3 -> VARIABLE
-	JMP DSTACK	; =5 -> STRING DESC. STACK
+	LDA STAT	; GETSA-Einstieg mit C=0
+	CMP #STAT_VAR	; String-Status?
+	BCC ARRAY	; =1 -> Arrays
+	BEQ VAR		; =3 -> Variablen
+	JMP DSTACK	; =5 -> String-Desc.-Stack
 
-ARRAYS	STA PTR		; ARRAY POINTER
-	STX PTR+1
+; *** Arrays: ARYTAB bis STREND
+
+ARRAYS	STA PTR		; A/X von Variablendurchlauf
+	STX PTR+1	; Start Array-Array-Bereich
 	LDY #STAT_ARY
-	STY STAT	; ARRAYS STATUS
+	STY STAT	; Status: Arrays
 ISARREND
 	LDA PTR
 	LDX PTR+1
-	CPX STREND+1
-        BNE NEXTARR
+CHKAEND	CPX STREND+1	; Ende des Array-Bereichs
+        BNE NEXTARR	; erreicht?
 	CMP STREND
-	BEQ NOSTRING	; ARRAYS FERTIG
+	BEQ NOSTRING	; Arrays fertig -> kein String
 NEXTARR
-	STA STRDP	; IMMER C=0
+	STA STRDP	; immer C=0
 	STX STRDP+1
 	LDY #0
-	LDA (STRDP),Y	; ARRAY-NAME
-	TAX		; VAR-TYP MERKEN
+	LDA (STRDP),Y	; Array-Name
+	TAX		; Array-Typ merken
 	INY
 	LDA (STRDP),Y
-	PHP		; VAR-TYP MERKEN
+	PHP		; Array-Typ merken
 	INY
-	LDA (STRDP),Y	; OFFSET NÄCHSTES ARRAY
-	ADC PTR		; C IST BEREITS 0 (CMP/CPX)
-	STA PTR		; START FOLGEARRAY
+	LDA (STRDP),Y	; Offset nächstes Array
+	ADC PTR		; C-Flag ist bereits 0 (CMP/CPX)
+	STA PTR		; Start Folge-Array
 	INY
 	LDA (STRDP),Y
 	ADC PTR+1
 	STA PTR+1
-	PLP		; VAR-TYP HOLEN
-	BPL ISARREND	; KEIN STRINGARRAY
-	TXA		; VAR-TYP HOLEN
-	BMI ISARREND	; KEIN STRINGARRAY
+	PLP		; Var.-Typ holen
+	BPL ISARREND	; kein String-Array
+	TXA		; Var.-Typ holen
+	BMI ISARREND	; kein String-Array
 	INY
-	LDA (STRDP),Y	; ANZAHL DER DIMENSIONEN
+	LDA (STRDP),Y	; Anzahl der Dimensionen
 	ASL		; *2
-	ADC #5		; OFFSET = DIM*2+5
-	LDY #0
-	BEQ ADVDESC
-ARRAY
-	LDY #0
+	ADC #5		; Offset = Dimensionen*2+5
+			; C=0 solange Dim.. <= 125
+	BNE ADVDESC	; immer verzweigen
+ARRAY			; Einstieg bei Fortsetzung
 NEXTASTR
 	CLC
-	LDA #3		; STRING-DESCRIPTOR-LÄNGE
-ADVDESC
-	ADC STRDP	; STRING WEITER
+	LDA #3		; String-Descriptor-Länge
+ADVDESC	ADC STRDP	; nächten String
 	STA STRDP
-	BCC ISLASTASTR
-	INC STRDP+1
-ISLASTASTR
-	CMP PTR		; ARRAY DURCH?
+	BCC +
+	INC STRDP+1	; Überlauf High-Byte
++	CMP PTR		; Array durch?
 	BNE IS0ASTR
 	LDX STRDP+1
 	CPX PTR+1
-	BEQ ISARREND
+	BEQ CHKAEND	; A/X = PTR, Array-Ende prüfen
 IS0ASTR
-	LDA (STRDP),Y	; STR.-LÄNGE
-	BEQ NEXTASTR	; WEITER IM ARRAY
-	STA LEN
+	LDY #0
+	LDA (STRDP),Y	; String-Länge
+	BEQ NEXTASTR	; weiter im Array
+	STA LEN		; Rückgabevariable
 	INY
-	LDA (STRDP),Y	; ADRESSE LOW
+	LDA (STRDP),Y	; String-Adresse low
 	TAX
 	INY
-	LDA (STRDP),Y	; ADRESSE HIGH
-	TAY
-	RTS		; IN X/Y RETOUR
+	LDA (STRDP),Y	; String-Adresse high
+	TAY		; immer ungleich 0, Z=0
+	RTS		; Adresse in X/Y retour
 
 NOSTRING
-	LDA #0
-	STA LEN
-	RTS
+	LDA #0		; Länge 0 
+	STA LEN		; kein String gefunden
+	RTS		; Z=1
 
 ;
-; CORR ( STRADR, STAT -> )
+; CORR - String-Adresse im Descriptor korrigieren
 ;
-CORR	LDA STAT	; STR.-ADR. KORRIGIEREN
-	AND #%011	; NUR 2 BITS
-	TAY		; LAGE DES DESCRIPTORS
+; ( STRADR, STAT -> )
+;
+CORR	LDA STAT	; String-Status
+	AND #%011	; nur 2 Bits
+	TAY		; Lage des Descriptors
 	LDA NEWPTR	;
-	STA (STRDP),Y	; ... BEI STR.-STACK
-	INY		; ... UND ARRAY VERSCHIEDEN!
+	STA (STRDP),Y	; ... bei SDS
+	INY		; ... und Array verschieden!
 	LDA NEWPTR+1
 	STA (STRDP),Y
 	RTS
 
-ORIGVID !byte 0		; ORIGINAL VIDEO DER MARKENPOSITION
-ORIGCOL !byte 0		; ORIGINAL FARBE DER MARKENPOSITION
-SAVE	!byte 0		; GESICHERTE ZP-VARIABLEN
+ORIGVID !byte 0		; original Video der Markenposition
+ORIGCOL !byte 0		; original Farbe der Markenposition
+SAVE	!byte 0		; gesicherte ZP-Variablen
 *=*+ZPLEN-1
 
 

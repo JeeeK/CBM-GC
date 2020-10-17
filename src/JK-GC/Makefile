@@ -5,7 +5,7 @@
 # ACME cross-assembler environment
 #
 
-VERSION=2.0-2013-11-24
+VERSION=2.1-rel2-2019-02-15-New
 
 # disable default suffixes and rules
 .SUFFIXES:

@@ -1,22 +1,55 @@
-Super Garbage Collection - HypraAss Source
-==========================================
-1985-2016 J. E. Klasek j klasek.at
-
-
-The Super GC Version 2.0 2013-11-24. Vastly optimized, but with two
-severe bugs:
-
-1. String Descriptor Stack (SDS) bug:
-   The GC might hang in while processing the SDS in the case the SDS
-   contains a non-empty string!
-
-2. The reserved buffer space of 256 bytes is missing. This was a bug
-   from SuperGC V1.1 in HypraAss version 1.1, which has been already
-   fixed, but was reintroduced because the fix wasn't commented.
+Super Garbage Collection
+========================
+1985-2019 J. E. Klasek j klasek.at
 
 
 ACME source version, with german comments.
 Based on HypraAss' version from 1985-12-27
+
+
+Versions
+--------
+
+The very first production version 1.0 has been used as a patched
+version where the zero-page locatioin save from line 1090 to 1100
+is to late (after they habe been changed).
+Because these locations aren't used by BASIC and KERNAL this is not a
+real problem. However, in day by day use just the monitor-patched
+version was used from 1985 on.
+
+1985-12-27 VERS. 1.1    Original version
+	HypraAss: (path hypraass/)
+		This version contains 2 bugs:
+		1. Zero-page location save done to late.
+		2. Buffer reserved space of 256 bytes are missing.
+		This version was only in use in a monitor-patched
+		variant, which fixed this bugs.
+	ACME: bugs fixed: (path acme/)
+		The zero-page location save part with initialisation of
+		FLAG from line 1105 to 1120 moved before the first use.
+
+2013-11-24 VERS. 2.0	Vastly optimized, but with two severe bugs:
+	1. String Descriptor Stack (SDS) bug:
+	   The GC might hang in while processing the SDS in the case the SDS
+	   contains a non-empty string!
+	2. The reserved buffer space of 256 bytes is missing. This was a bug
+	   from SuperGC V1.1 in HypraAss version 1.1, which has been already
+	   fixed, but was reintroduced because the fix wasn't commented.
+
+2019-02-15 VERS. 2.1    revised version with eliminated bugs from V2.0
+			plus additional optimizations:
+	1. There is no need for an extra FLAG variable to recognise the
+	   end-condition.
+	2. The returned status of Routine GETSA is given by the zero flag
+	   (instead have to explicitely read the location LEN).
+	3. String copy routine for transfering into the buffer: Entry
+	   part shortened becaused a length 0 situation will never
+	   occur.
+	4. The code for the SDS processing has been restructured
+	   (X-register based)
+	5. Removed an unused LDA statement during the variable processing.
+	6. Clearer structuring of the array processing.
+
 
 
 Prerequisites
@@ -35,7 +68,9 @@ jk-gc.asm		assembler source for ACME
 jk-gc.l			list output of ACME assembler run
 jk-gc.o			code (binary)
 jk-gc.r			report output of ACME assembler run
-
+supergc.txt		SuperGC usage: initialisation sequence for
+			BASIC (loader and installer).
+			(jk-gc.o has to be named as "supergc")
 
 
 Original version
