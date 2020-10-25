@@ -1,0 +1,142 @@
+#!/bin/csh -f 
+# 2013-01-28 J.E. Klasek j@klasek.at
+#
+# bas2prg 	Translate list of C64 Basic V2 ASCII source into PRG files
+# prg2bas 	Translate list of PRG files into C64 Basic V2 ASCII source
+#
+# Revisions:
+#	2013-02-03 JK
+#		Dual function added: also prg2bas!
+#	2014-08-31 JK
+#		PET V4 Basic Option.
+#
+
+set myname="$0"
+set myname="$myname:t"
+
+set optext=
+
+switch("$myname")
+	case bas2prg:
+		set out=prg
+		set in=bas
+		breaksw
+	case prg2bas:
+		set out=bas
+		set in=prg
+		breaksw
+	default:
+		echo "ERROR: script must called bas2prg or prg2bas - do not know what to do\!"
+		exit 2
+endsw
+	
+if ("$1" == "") then
+usage:
+	if ($out == "prg") then
+	echo "usage: $0 [-f][-4|--pet|-7] FILE.bas [FILE1.bas ...]"
+	echo "	translates an ASCII CBM Basic source files into PRG format"
+	else
+	echo "usage: $0 [-f][-4|--pet-7] FILE[.prg] [FILE1.[prg] ...]"
+	echo "	translates PRG file into ASCII CBM Basic source format"
+	endif
+	echo "	Options:"
+	echo "		-f		force overwrite"
+	echo "		-7		Basic 7.0 (C128)"
+	echo "		-4|--pet	Pet Basic V4"
+	echo "				(default: C64 Basic V2)"
+	exit 2
+endif
+
+
+### process options
+
+set optver=2
+
+while ($#argv > 0)
+  switch("$1")
+	case -4:
+	case --pet:
+		set optver=4
+		shift
+		breaksw
+	case -7:
+		set optver=70
+		shift
+		breaksw
+	case -f:
+		set force=1
+		shift
+		breaksw
+	case -*:
+		echo "ERROR: unknown option $1"
+		goto usage
+	default:
+		# no options, leave
+		break
+  endsw
+end
+
+
+### process filename arguments 
+
+while ($#argv > 0)
+
+  set file="$1"
+
+  if (! -f "$file" ) then
+	echo "WARNING: input file $file missing - skipped."
+	shift
+	continue	
+  endif
+
+  if ($out == "prg" && "$file:e" != $in || $out == "bas" && "$file:e" != "" && "$file:e" != $in || "$file:e" == $out) then
+	echo "WARNING: input file $file must end with '.$in' - skipped."
+	shift
+	continue	
+  endif
+
+  # without extension ...
+  set ofile="$file:r"
+  # bas -> prg: 2nd extension is .prg (INPUTFILE.prg.bas)
+  if ("$ofile:e" != "$out") then
+	# remaining file has not alread the output extension ...
+  	set ofile="$ofile.$out"
+  endif
+  if (-e "$ofile" && ! $?force) then
+    if (! $?force) then
+	echo -n "WARNING: $ofile already exists\! - skip|overwrite|rename (S/o/r)? "
+	set a=$<
+	switch("$a")
+	  case r:
+	  case R:
+		mv -f "$ofile" "$ofile.PREV" && echo "Keeping $ofile.PREV ..."
+	  case o:
+	  case O:
+		echo "Overwriting $ofile ..."
+		breaksw
+	  case s:
+	  case S:
+	  default:
+		echo "Skipping $ofile ..."
+		shift
+		continue
+		breaksw
+	endsw
+    else
+	rm -f "$ofile"
+    endif
+  endif	
+  if ($out == "prg") then
+  if ($optver == "4") then
+	set optver=4e
+	set optext="-l 0401"
+  else if ($optver == "7") then
+	set optver=70
+	set optext="-l 1C01"
+  endif
+  petcat -o "$ofile" -w$optver $optext -- "$file" >&/dev/null && echo "Converting to $ofile ..."
+  else
+  petcat -o "$ofile" -$optver $optext -- "$file" >&/dev/null && echo "Converting to $ofile ..."
+  endif
+  shift
+end

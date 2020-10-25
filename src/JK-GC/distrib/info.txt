@@ -1,0 +1,25 @@
+Super Garbage Collection Distribution
+=====================================
+2020-10-10 Johann E. Klasek  j klasek at
+
+
+Creating the image
+------------------
+
+### Requirements
+
+ * OpenCBM at least in version 0.4.2, using the commands
+   petcat, c1541
+ * csh (for scripts in TOOLS directory)
+ * make (GNU variant is recommented)
+
+
+### Build
+
+Build the image with the following sequence:
+
+make new
+make
+make install
+
+

@@ -1,0 +1,60 @@
+Super Garbage Collection Distribution 2020
+==========================================
+2020-10-10 Johann E. Klasek johann AT klasek at
+
+Basierend auf SuperGC (JK-GC) V2.2
+
+
+### Kenndaten
+
+Start: $C500 50432
+Ende: $C702
+Erkennungsbyte: (dann ist das Programm bereits geladen)
+	$C501 (50433) = $46 (71, "g")
+	$C502 (50432) = $43 (67, "c")
+
+Ende:
+                Ende            zuletzt benutzte Adresse
+                hex     dez.    hex     dec
+---------------------------------------------------------
+supergc-basic	$C705	50949	$C70B	50955
+supergc-a000	$C7CB	51147	$C7D1	51153
+supergc-e000	$C7C1	51137	$C7C7	51143
+
+
+
+
+### GC aus BASIC laden und aktivieren
+
+1 ifpeek(50433)<>71orpeek(50434)<>67thenload"supergc",8,1
+2 sys50432
+
+
+### GC deaktivieren
+
+## für supergc-basic:
+
+# dabei wird das BASIC-ROM wieder aktiviert
+
+POKE1,55
+
+## für supergc-irqa, supergc-irqe
+
+# Interrupt sperren (CIA Interrupts sperren, $DC0E),
+# IRQ-Vektor wieder auf $EA31 setzen,
+# Interupt freigeben ($FF5E):
+
+poke56334,0:poke788,49:poke789,234:sys65374
+
+
+
+### GC reaktivieren
+
+## für supergc-basic:
+
+# dabei wird das BASIC-ROM ausgeblendet und die gepatchte Kopie verwendet
+
+POKE1,54
+
+
+

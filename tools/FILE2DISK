@@ -1,0 +1,117 @@
+#!/bin/csh -f
+# 2012-02-09 J.E. Klasek j@klasek.at
+#
+# uses OpenCBM (expecting version 0.4.2)
+#
+# Aufruf:
+#	FILE2DISK image file [file ...]
+#		copies given files do a D64 image (must exist before!)
+#
+#	FILE2DISK image 
+#		copies all file in the current directory
+#		(but only with suffix .prg, .seq and .usr)
+#		into a D64 image (is created on demand).
+#
+# Revisions:
+#	2012-02-09 JK
+#		Created
+#	2012-02-13 JK
+#		Fixed: Character "_" in a filename is converted back. 
+#	2012-02-17 JK
+#		New: Implementation of a file list given by arguments.
+#	2012-02-20 JK
+#		Fixed: Quoting in filename handling.
+#	2012-04-23 JK
+#		Fixed: "'" im Namen bringt Translation des Namen
+#			zu Abbruch -> Workaround.
+#	2012-06-13 JK
+#		Fixed: auch Hidden Files (mit "." beginnend) berücksichtigen.
+#
+# Bugs:
+#	Filenamen mit "'" ohne Fehlermeldung bzw. Workaround behandeln.
+#		eventuell auch andere spezielle Shell-Zeichen ...
+#		2012-04-23 JK
+#
+
+set mypath="$0"
+set myname="$0"
+set myname="$myname:t"
+set mypath="$mypath:h"
+if ("$mypath" == "$myname" || "$mypath" == "." ) set mypath="`pwd`"
+
+set tmpf=".$myname.${USER}$$"
+onintr leave
+
+
+set image="$1"
+if ("$image" == "" || $#argv < 1) then
+	echo "ERROR: image parameter missing\!"
+usage:
+	echo "Usage: $0 d64-image [file [file ...]]"
+	echo "		all .prg, .seq, .usr Files  if  file arguments are missing"
+	exit 2
+endif
+
+shift
+
+set TEST=echo
+set TEST=
+
+if ($#argv == 0) then
+    $TEST c1541 -format "$image:r,jk" d64 "$image"
+
+
+    # Auch Hidden Files, z.B. solche, die zu "." umgewandelte Sonderzeichen
+    # am Anfang tragen ...
+    foreach file (*.prg *.seq *.usr .*.prg .*.seq .*.usr)
+	set e="$file:e"
+	set f="$file:r"
+	# note: variable substitution happens before double quoted single quoting!
+	set type="`echo '$e'|sed -e 's/^\(.\).*/\1/'`"
+	# note: variable substitution happens before double quoted single quoting!
+	set f="`echo '$f' | tr '_' '/'`"
+	# irgendwas ist schief gegangen (bei einem Fehler ist $f leer!)
+	if ("$f" == "") then
+		# ... dann den ursprünglichen Namen nehmen, vielleicht funktionierts
+		# auch so.
+		set f="$file:r"
+	endif	
+        $TEST c1541 "$image" -write "$file" "$f,$type"
+    end
+
+else
+
+  # take only the given files (maybe with other suffixes) ...
+  while ($#argv > 0)
+	set file="$1"
+	shift
+	# Endung ...
+	set e="$file:e"
+	switch ("$e")
+	  case prg:
+	  case usr:
+	  case seq:
+		set f="$file:r"
+		# note: variable substitution happens before double quoted single quoting!
+		set type="`echo '$e'|sed -e 's/^\(.\).*/\1/'`"
+		breaksw
+	  default:
+		set f="$file"
+		set type="p"
+		breaksw
+	endsw
+	# note: variable substitution happens before double quoted single quoting!
+	set f="`echo '$f' | tr '_' '/'`"
+        $TEST c1541 "$image" -write "$file" "$f,$type"
+  end # while
+
+endif
+
+$TEST c1541 "$image" -dir
+
+
+leave:
+rm -f $tmpf
+
+exit 0
+
