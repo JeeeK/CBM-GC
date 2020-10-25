@@ -2,59 +2,64 @@ Super Garbage Collection Distribution 2020
 ==========================================
 2020-10-10 Johann E. Klasek johann AT klasek at
 
-Basierend auf SuperGC (JK-GC) V2.2
+Based on SuperGC (JK-GC) V2.2
 
 
-### Kenndaten
+Characteristics
+---------------
 
-Start: $C500 50432
-Ende: $C702
-Erkennungsbyte: (dann ist das Programm bereits geladen)
+Signature: (to prove if the program is already loaded)
 	$C501 (50433) = $46 (71, "g")
 	$C502 (50432) = $43 (67, "c")
 
-Ende:
-                Ende            zuletzt benutzte Adresse
-                hex     dez.    hex     dec
----------------------------------------------------------
-supergc-basic	$C705	50949	$C70B	50955
-supergc-a000	$C7CB	51147	$C7D1	51153
-supergc-e000	$C7C1	51137	$C7C7	51143
+Start: $C500 50432
+
+End:
+			End             last address used
+	Variant         hex     dec     hex     dec
+	-------------------------------------------------
+	supergc-basic	$C705	50949	$C70B	50955
+	supergc-a000	$C7CB	51147	$C7D1	51153
+	supergc-e000	$C7C1	51137	$C7C7	51143
 
 
 
+Usage in BASIC
+--------------
 
-### GC aus BASIC laden und aktivieren
+
+### load and activate GC
 
 1 ifpeek(50433)<>71orpeek(50434)<>67thenload"supergc",8,1
 2 sys50432
 
 
-### GC deaktivieren
 
-## für supergc-basic:
+### deactivate GC
 
-# dabei wird das BASIC-ROM wieder aktiviert
+## for variant supergc-basic:
 
-POKE1,55
+# just the BASIC ROM is switched back again
 
-## für supergc-irqa, supergc-irqe
+poke1,55
 
-# Interrupt sperren (CIA Interrupts sperren, $DC0E),
-# IRQ-Vektor wieder auf $EA31 setzen,
-# Interupt freigeben ($FF5E):
+## for variants supergc-irqa, supergc-irqe
+
+# Mask interrupts (disable CIA interrupts sperren, $DC0E),
+# Restore the IRQ vektor with the default value $EA31,
+# Reenable interrupts ($FF5E):
 
 poke56334,0:poke788,49:poke789,234:sys65374
 
 
 
-### GC reaktivieren
+### reactivate GC
 
-## für supergc-basic:
+## for variant supergc-basic:
 
-# dabei wird das BASIC-ROM ausgeblendet und die gepatchte Kopie verwendet
+# the BASIC ROM is switched out and the patched RAM copy is used again
 
-POKE1,54
+poke1,54
 
 
 

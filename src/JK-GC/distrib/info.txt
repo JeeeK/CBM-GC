@@ -3,6 +3,23 @@ Super Garbage Collection Distribution
 2020-10-10 Johann E. Klasek  j klasek at
 
 
+
+Files
+-----
+
+Makefile		creating the image with make
+
+gc-demo.bas		demo-program: stress test
+gc-test.bas		test-program: long run
+			
+info.txt		this file
+
+supergc-loader.bas	loader snippet for BASIC usage
+
+supergc.txt		intro to BASIC usage
+
+
+
 Creating the image
 ------------------
 
