@@ -59,10 +59,25 @@ version was used from 1985 on.
 	5. Removed an unused LDA statement during the variable processing.
 	6. Clearer structuring of the array processing.
 
-
 	A set debugging option maps the buffer into a hires screen while
 	the GC is running.
 	See chapter Debugging below.
+
+2020-10-10 VERS. 2.2	feature version with new IRQ hook method
+
+	The new IRQ hook method comes without the need for a RAM copy of
+	the BASIC ROM and without patching the legacy GC routine. An
+	IRQ handler is hooked in and an eventually running old GC routine
+	is taken over by the new routine (on the fly). Advantage: RAM
+	below the BASIC ROM is left for other usage, or could be used as
+	the GC buffer (instead of $E000 to $FFFF).
+
+	An already existing IRQ handler hook is chained up.
+
+        From the source code these 3 variants could be derived:
+          1. the old method of patching the RAM copy of BASIC
+          2. the IRQ hook method with buffer at $A000-$BFFF
+          3. the IRQ hook method with buffer at $E000-$FFFF
 
 
 
@@ -80,10 +95,21 @@ Makefile		assemble the program
 debug.asm		optional debugging module, which maps
 			the GC buffer into the hires screen.
 info.txt		this file
+
+jk-gc-basic.l		list output of ACME assembler run
+jk-gc-basic.o		code (binary) - BASIC ROM hook
+jk-gc-basic.r		report output of ACME assembler run
+
+jk-gc-irqa.l		list output of ACME assembler run
+jk-gc-irqa.o		code (binary) - IRQ hook, buffer at $A000
+jk-gc-irqa.r		report output of ACME assembler run
+
+jk-gc-irqe.l		list output of ACME assembler run
+jk-gc-irqe.o		code (binary) - IRQ hook, buffer at $A000
+jk-gc-irqe.r		report output of ACME assembler run
+
 jk-gc.asm		assembler source for ACME
-jk-gc.l			list output of ACME assembler run
-jk-gc.o			code (binary)
-jk-gc.r			report output of ACME assembler run
+jk-gc.o			code (binary), default variant
 supergc.txt		SuperGC usage: initialisation sequence for
 			BASIC (loader and installer).
 			(jk-gc.o has to be named as "supergc")
@@ -96,6 +122,44 @@ Original version
 derived from the 1985 HypraAss source:
 
 ../../../tools/hacat -n ../hypraass/s-gc-8-dok.prg
+
+
+
+Usage
+-----
+
+### Activate
+
+For a binary starting at 50432 ($C500) all variants contains at the
+location $C536 the value $A9.
+
+1 ifpeek(50486)<>169thenload"supergc",8,1
+2 sys50432
+
+With this sequence all variants of the Super GC can be loaded and
+activated.
+
+The default version is the one with IRQ hook with the buffer located in
+the RAM under the BASIC ROM ($A000 - $BFFF).
+
+
+### Deactivate
+
+For IRQ hook (default variant):
+
+Mask interrupts (disable CIA interrupts sperren, $DC0E),
+Restore the IRQ vektor with the default value $EA31,
+Reenable interrupts ($FF5E):
+
+poke56334,0:poke788,49:poke789,234:sys65374
+
+
+For BASIC hook:
+
+Switch back from RAM to ROM:
+
+poke1,55
+
 
 
 
