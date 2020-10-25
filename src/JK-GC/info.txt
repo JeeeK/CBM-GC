@@ -1,10 +1,11 @@
 Super Garbage Collection
 ========================
-1985-2019 J. E. Klasek j klasek.at
+1985-2020 Johann E. Klasek j klasek.at
 
 
 ACME source version, with german comments.
 Based on HypraAss' version from 1985-12-27
+
 
 
 Versions
@@ -79,6 +80,10 @@ version was used from 1985 on.
           2. the IRQ hook method with buffer at $A000-$BFFF
           3. the IRQ hook method with buffer at $E000-$FFFF
 
+	(organisational improvement: configurable start address,
+	english-only source labels, comments, assertions checks
+	for option combinations)
+
 
 
 Prerequisites
@@ -88,12 +93,24 @@ acme			ACME cross-assembler executable
 			at least in version 0.96.4 with report option -r
 
 
+
 Files
 -----
 
-Makefile		assemble the program
+acme/			original version in ACME cross assembler
+			syntax,
+			see also section "Assembling with ACME"
+
+hypraass/		original version in HypraAss assembler
+			syntax
+
+Makefile		assemble the program variants,
+			see section "Making" below
+
 debug.asm		optional debugging module, which maps
-			the GC buffer into the hires screen.
+			the GC buffer into the hires screen,
+			see section "Debugging" below
+
 info.txt		this file
 
 jk-gc-basic.l		list output of ACME assembler run
@@ -109,15 +126,19 @@ jk-gc-irqe.o		code (binary) - IRQ hook, buffer at $A000
 jk-gc-irqe.r		report output of ACME assembler run
 
 jk-gc.asm		assembler source for ACME
+
+jk-gc.l			list output of ACME assembler run
 jk-gc.o			code (binary), default variant
+jk-gc.r			report output of ACME assembler run
+
 supergc.txt		SuperGC usage: initialisation sequence for
-			BASIC (loader and installer).
+			BASIC as loader and installer
 			(jk-gc.o has to be named as "supergc")
+
 
 
 Original version
 ----------------
-
 
 derived from the 1985 HypraAss source:
 
@@ -125,15 +146,52 @@ derived from the 1985 HypraAss source:
 
 
 
+Making
+------
+
+make
+		creates all variants
+
+make clean
+		remove intermediate and output files
+
+
+Parameters in Makefile:
+
+ * START	defines the binary start address, defaults
+		to $C500 (note: in a Makefile "$" has to be
+		quoted by doubling the character!)
+
+
+
 Usage
 -----
 
+### Variant selection
+
+In general: the IRQ hook variants are approx. 200 byte longer in
+code size.
+
+
+ * small code size and RAM $A000 to $BFFF available
+   -> jk-gc-basic.o
+
+ * RAM blow $A000 to $BFFF is needed for something else
+   -> jk-gc-irqe.o
+ 
+ * RAM blow $E000 to $FFFF is needed for something else
+   (for example hires graphic)
+   -> jk-gc-irqa.o
+
+
+
 ### Activate
 
-For a binary starting at 50432 ($C500) all variants contains at the
-location $C536 the value $A9.
+For a binary starting at 50432 ($C500) all variants have a signature
+with value 71 ("g") in 50433 ($C501, offset 1) and value 67 ("c") in
+50434 ($C502, offset 2)
 
-1 ifpeek(50486)<>169thenload"supergc",8,1
+1 ifpeek(50433)<>71orpeek(50434)<>67thenload"supergc",8,1
 2 sys50432
 
 With this sequence all variants of the Super GC can be loaded and

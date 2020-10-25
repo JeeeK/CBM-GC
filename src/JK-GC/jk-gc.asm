@@ -1,6 +1,3 @@
-*= $C500
-;
-;.OPT LIST,NOSYM
 ;
 ; *************************
 ; *  GARBAGE  COLLECTION  *
@@ -9,7 +6,7 @@
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
 ; * 2019-02-15 VERS. 2.1  *
-; * 2020-10-08 VERS. 2.2  *
+; * 2020-10-10 VERS. 2.2  *
 ; *************************
 ;
 ; Aufruf: SYS ...
@@ -19,6 +16,13 @@
 ; GC verwendet; alle anderen
 ; werden wieder restauriert.
 
+; Start des Codes ...
+
+!ifdef start {
+	*=start
+} else {
+	*= $C500
+}
 
 ; Optionen:
 
@@ -44,6 +48,21 @@
 ;orig_movblock = 1
 
 
+; Optionsabhängigkeiten
+
+; Wenn BASIC im RAM gepatcht wird, immer die originale MOVBLOCK-Routine
+; verwenden!
+!ifdef basic_patch {
+orig_movblock = 1
+}
+
+; In der BASIC-Patch-Variante darf der Puffer nicht auch im RAM unter
+; dem BASIC-ROM sein!
+!ifdef basic_patch {
+  !ifdef basic_rom_buffer {
+    !error "Ungültige Option: basic_rom_buffer und basic_patch dürfen nicht gleichzeitig aktiv sein!"
+  }
+}
 
 
 ; BASIC Systemvariablen
@@ -67,15 +86,18 @@ V_IRQ    = $0314	; IRQ-Vektor, 2 Bytes
 
 STRPTR   = FRETOP	; String-Pointer = FRETOP
 STRDP    = $22		; String-Descriptor-Address
-BERANF   = $4C		; Bereichsanfang
+			; $22 wird von originalem MOVBLOCK zerstört!
+RNGBEG   = $4C		; Bereichsanfang
 NEWPTR	 = $4E		; Neuer String-Pointer
 PTR      = $50		; Array-Pointer
 LEN      = $52		; String-Length
 ; $54-$56 belegt
-STAT     = $57		; String-State
+STAT     = $57		; String-Status, Werte siehe
+			; STAT_* weiter unten.
 ; $58-5B wird von MOVBLOCK zerstört!
 STRADR   = $58		; String-Address (temp.)
-BEREND   = $5D		; Bereichsende
+			; (MOVBLOCK: Zielblockende+1 bzw. Zielblockanfang)
+RNGEND   = $5D		; Bereichsende
 BUFPTR   = $5F		; Buffer-Pointer
 			; (MOVBLOCK: Quellblockanfang!)
 
@@ -89,7 +111,7 @@ ZPLEN    = ZPEND-ZPSTART+1
 
 ; Konstanten
 
-; für Variabe STAT (String State):
+; für Variabe STAT (String-Status):
 STAT_SDS = 5		; String-Descriptor-Stack
 STAT_VAR = 3		; einfache Variablen
 STAT_ARY = 1		; Array
@@ -105,9 +127,9 @@ ROMSIZE  = $2000        ; ROM-Länge 8 KByte8
 
 ; Puffer
 !ifndef basic_rom_buffer {
-BUF	 = KERNAL	; Puffer unter KERNAL
+BUF	 = KERNAL	; Puffer unter KERNAL-ROM
 } else {
-BUF	 = BASIC	; Puffer unter KERNAL
+BUF	 = BASIC	; Puffer unter BASIC-ROM
 }
 BUFSIZE  = ROMSIZE	; Puffergröße
 
@@ -122,7 +144,7 @@ MARKEOFF = 40*25-1	; Markenposition
 MARKEVID = VIDBASE+MARKEOFF
 MARKECOL = COLBASE+MARKEOFF
 
-PROZPORT = $01		; Prozessorport
+PROCPORT = $01		; Prozessorport
 MEMROM   = %00110111	; Basic+Kernal ROM, $37
 MEMBAS   = %00110110	; Basic RAM+Kernal ROM, $34
 MEMRAM   = %00110101	; Basic+Kernal RAM, $35
@@ -137,7 +159,14 @@ MEMRAM   = %00110101	; Basic+Kernal RAM, $35
 
 INSTALL
 
+	BIT $0000	; Argument hält die Kennung
+			; quasi als NOP-Befehlt.
+	* = *-2		; Operand überschreiben!
+	!text "GC"	; Kennung für Ladetest
+			; Für alle Varianten gleich!
 !ifdef basic_patch {
+
+	; BASIC-ROM/RAM-Patch-Einbindung
 
 MOVBLOCK = $A3BF	; Block verschieben aus BASIC-ROM
 			; zerstört $58/$59/$5A/$5B/$22
@@ -145,7 +174,7 @@ MOVBLOCK = $A3BF	; Block verschieben aus BASIC-ROM
 	; BASIC ins RAM kopieren, um die GC-Routine
 	; zu patchen ...
 	LDA #MEMROM
-	STA PROZPORT	; alles ROM (also vom ROM kopieren)
+	STA PROCPORT	; alles ROM (also vom ROM kopieren)
 	LDY #<BASIC	; ROM-Beginn
 	STY CPTR
 	LDA #>BASIC
@@ -158,9 +187,9 @@ CPYROM	LDA (CPTR),Y	; ROM lesen
 	INC CPTR+1	; nächste Page
 	DEX		; Page-Zähler
 	BNE CPYROM
-	LDA PROZPORT	; auf RAM umschalten
+	LDA PROCPORT	; auf RAM umschalten
 	AND #%11111110	; "BASIC-ROM aus"-Maske
-	STA PROZPORT
+	STA PROCPORT
 	LDA #<COLLECT	; "JMP COLLECT"
 	STA GARBCOL+1	; patchen ...
 	LDA #>COLLECT
@@ -169,6 +198,9 @@ CPYROM	LDA (CPTR),Y	; ROM lesen
 	STA GARBCOL
 	RTS
 } else {
+
+	; IRQ-Einbindung
+
 	SEI
 	LDA V_IRQ	; bisherige IRQ-Routine aufheben
 	LDX V_IRQ+1
@@ -202,6 +234,10 @@ INSTEXIT
 ;         INY
 ;         LDA $59
 ;         STA ($4E),y
+;      Bei Punkt 3 bereits der gesamte Descriptor
+;      korrigiert (nach dem Verschieben des Strings),
+;      aber es bringt faktisch keine Ersparnis diese Routine
+;      mitzuverwenden.
 ;   2. Wenn der PC im Bereich von GC_PHP_START bis GC_PHP_END liegt,
 ;      ist der Stack inkonsistent -> ein Byte vom Stack nehmen.
 ;   3. Wenn die Subroutine "Open Space in Memory" unterbrochen
@@ -209,7 +245,8 @@ INSTEXIT
 ;      gerade kopierte String fertig übertragen werden, daher
 ;      kehrt das RTI wieder zur Routine zurück und erst mit
 ;      dem RTS wird über die manipulierte Adresse am Stack
-;      zur neuen GC gesprungen.
+;      erst zur Korrektur des Descriptors und dann zur neuen GC
+;      gesprungen.
 ;   4. Wenn in Subroutine "Search for Next String" unterbrochen
 ;      wurde (an den drei möglichen Aufrufadressen erkannt),
 ;      befindet sich am Stack die Adresse des Aufrufers, wobei
@@ -361,6 +398,15 @@ CHK_PC
 	INY		; String-Adresse-Low (ist schon gesetzt!)
 	LDA $59
 	STA ($4E),Y	; nun String-Adresse-High setzen
+
+	; Der obige Teil könnte theoretisch auch die Descriptorkorrektur
+	; bei CORR_STR nutzen (die aber nicht im IRQ-Kontext läuft und
+	; deswegen hier nicht direkt angesprungen werden kann). Statt
+	; über RTI mit Fortsetzung bei START_COLLECT, müsste 
+	; alternativ CORR_STR verwendet werden. Doch eine entsprechende
+	; Umsetzung würde auch 7 Bytes erfordern, die gegenüber dem 
+	; obigen Code nur 1 Byte spart. Der Klarheit wegen wird hier auf
+	; diesen Variante verzichtet.
 +
 	; mittels RTI COLLECT aufrufen:
 TO_COLLECT
@@ -378,7 +424,7 @@ SKIPSUB			; Open-Space- oder Search-for-Next-String-Routine abgebrochen:
 START_COLLECT
 	LDA #3
 	STA $53		; Step-Size für nächsten Descriptor auf
-			; Ausgangswert setzen (wird von alter GC
+			; Ausgangswert setzen. (Wird von alter GC
 			; nicht initialisiert!)
 }
 
@@ -407,8 +453,8 @@ SAVLOOP	LDA ZPSTART-1,X	; retten
 	LDX MEMEND+1	; und Bereichanfang 
 	STA STRPTR	; auf Speicherende
 	STX STRPTR+1	; setzen.
-	STA BERANF
-	STX BERANF+1
+	STA RNGBEG
+	STX RNGBEG+1
 
 ; *** Nächster zu betrachtender Bereich am String-Heap
 
@@ -422,11 +468,11 @@ SAVLOOP	LDA ZPSTART-1,X	; retten
 ;   +-+-+-+      +-----------------------+----------+------+------------+
 ;    ^            ^                       ^          ^      ^            ^
 ;    |            |                       |          |      |            |
-;    STRDP        STREND                  BERANF     BEREND STRPTR       MEMSIZ
+;    STRDP        STREND                  RNGBEG     RNGEND STRPTR       MEMSIZ
 ;                                                           =FRETOP
 ;   SDS,VAR,ARY  |<-------------------- String-Heap -------------------->|
 ;
-; Der Bereich BERANF bis BEREND (gesuchte Strings) ist immer um 256 Bytes 
+; Der Bereich RNGBEG bis RNGEND (gesuchte Strings) ist immer um 256 Bytes 
 ; kleiner als der Pufferbereich, da am Ende des Bereichs ein String beginnen
 ; könnte, der max. 254 Bytes das Bereichsende überragen könnte. Dieser 
 ; "Überhang" muss im Puffer Platz haben und dort reserviert sein!
@@ -436,15 +482,15 @@ NEXTBLOCK
 	STA NEWPTR	; BUFPTR mitziehen ...
 	LDA STRPTR+1
 	STA NEWPTR+1
-	LDX BERANF	; Bereich war zuletzt
-	LDA BERANF+1	; String-Heap-Ende?
+	LDX RNGBEG	; Bereich war zuletzt
+	LDA RNGBEG+1	; String-Heap-Ende?
 	CPX STREND
 	BNE +
 	CMP STREND+1
 	BEQ EXIT	; ja -> fertig
 +
-	STX BEREND	; um Pufferlänge - 256
-	STA BEREND+1	; nach unten verlegen.
+	STX RNGEND	; um Pufferlänge - 256
+	STA RNGEND+1	; nach unten verlegen.
 	!if <BUFSIZE > 0 {
 	  !error "BUFSIZE ist nicht ein Vielfaches von 256 ($100)!"
 	}
@@ -452,15 +498,15 @@ NEXTBLOCK
 	SBC #(>BUFSIZE-1) ; Bereichslänge in Pages,
 			; kann um 254 Bytes überragt werden!
 	BCC LASTRANGE	; < 0 = Unterlauf (also auch <STREND)
-	STA BERANF+1
+	STA RNGBEG+1
 	CPX STREND	; Ende des String-Heaps erreicht?
 	SBC STREND+1
 	BCS STRINRANGE	; Bereichsanfang >= String-Heap-Ende
 LASTRANGE
 	LDA STREND	; Bereichanfang =
 	LDX STREND+1	; Speicheranfang (String-Heap-Ende)
-	STA BERANF	; 
-	STX BERANF+1	; 
+	STA RNGBEG	; 
+	STX RNGBEG+1	; 
 	BNE STRINRANGE	; immer, weil High-Byte >0
 
 
@@ -506,13 +552,13 @@ NEXTSTR1
 	BEQ COPYBACK	; keinen String mehr gefunden!
 
 	TYA		; high Byte
-	CPX BEREND	; X/A >= BEREND:
-	SBC BEREND+1	; oberhalb des Bereichs, dann
+	CPX RNGEND	; X/A >= RNGEND:
+	SBC RNGEND+1	; oberhalb des Bereichs, dann
 	BCS NEXTSTR	; nächster String!
 
 	TYA		; high Byte
-	CPX BERANF	; X/A < BERANF:
-	SBC BERANF+1	; unterhalb des Bereichs, dann
+	CPX RNGBEG	; X/A < RNGBEG:
+	SBC RNGBEG+1	; unterhalb des Bereichs, dann
 	BCC NEXTSTR1	; nächster String!
 			; Innerhalb des Bereichs:
 	LDA BUFPTR	; Pufferzeiger um
@@ -581,7 +627,8 @@ COPYBACK
 	LDX NEWPTR+1	; Zielblockanfang	
 }
 	STA $58		; = STRADR
-	STX $59
+	STX $59		; je nach MOVBLOCK-Variante
+			; Ende+1 oder Anfang des Zielblocks
 
 !ifdef orig_movblock {
 	LDA NEWPTR
@@ -592,7 +639,7 @@ COPYBACK
 
 !if ((BUF+BUFSIZE) and $FFFF) != 0  {
 	LDA #<(BUF+BUFSIZE)
-	STA $5A
+	STA $5A		; Quellblockende+1
 	LDA #>(BUF+BUFSIZE)
 	STA $5B
 } else {
@@ -604,10 +651,12 @@ COPYBACK
 			; Quellbockanfang = BUFPTR
 
 	SEI		; keine Interrupts zulassen, wegen
-	LDA PROZPORT	; KERNAL-ROM wegblenden
+	LDA PROCPORT	; KERNAL-ROM wegblenden
 	PHA		; damit das Puffer-RAM zugänglich
 	LDA #MEMRAM	; wird. Auch BASIC-ROM ist damit weg!
-	STA PROZPORT
+			; Sowohl bei Puffer $F000 als auch $A000
+			; werden beide ROMs ausgeblendet.
+	STA PROCPORT
 
 	JSR MOVBLOCK	; BASIC-Routine Blockverschieben
 			; bei IRQ-Anbindung eigene Kopie verwenden,
@@ -615,7 +664,7 @@ COPYBACK
 			; Andernfalls ist ja die ROM-Kopie im RAM da.
 			; Z=1
 	PLA		; ursprünglicher Zustand
-	STA PROZPORT	; KERNAL-ROM wieder aktivieren
+	STA PROCPORT	; KERNAL-ROM wieder aktivieren
 	CLI
 NOCOPY
 	JMP NEXTBLOCK	; nächsten Bereich
@@ -806,18 +855,21 @@ CORR	LDA STAT	; String-Status
 	STA (STRDP),Y
 	RTS
 
+
+; optionale MOVBLOCK-Routen (für IRQ-Hook-Methode)
+
 !ifndef basic_patch {
 
   !ifndef orig_movblock {
-	; Die optimiert Routine
+	; Die optimierte Routine.
 	;
 	; Die "Open Space"-Routine aus dem BASIC-ROM, $A3BF
 	; ist beim Ausblenden des KERNALs, auch immer BASIC
-	; ausgeblendet ist, nicht verfügbar. Daher eine
-	; extra Routine.
+	; ausgeblendet und damit nicht verfügbar. Daher eine
+	; extra Routine, die aber etwas kürzer und schneller ist.
 
 	; Speicherbereich ($5F/$60) bis exkl. ($5A/$5B) -> ($58/$59)
-	; Für das Kopieren zu niedrigen Adressen ist es Überlappungsrobust.
+	; Für das Kopieren zu niedrigen Adressen ist es überlappungsrobust.
 	; Eingabe: $5F/$60 Startadresse Quelle
 	;	   $5A/$5B Endadresse+1 der Quelle
 	;	   $58/$59 Startadresse Ziel
@@ -864,7 +916,9 @@ copy    LDA ($5F),Y   ; Quelle auf
         BNE copy
         RTS
 	; braucht 6 Bytes weniger als die Originalroutine.
+
   } else {
+
 	; Die originale Routine aus dem ROM:
 	;
 	; Die "Open Space"-Routine aus dem BASIC-ROM, $A3BF

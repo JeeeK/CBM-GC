@@ -5,36 +5,48 @@
 # ACME cross-assembler environment
 #
 
-VERSION=2.2-rel1-2020-10-08-New
+VERSION=2.2-rel2-2020-10-10-New
+
+# Startadresse SuperGC
+START = $$C500
+
 
 # disable default suffixes and rules
 .SUFFIXES:
 
 F=jk-gc
 
-all: jk-gc-basic.o jk-gc-irqa.o jk-gc-irqf.o jk-gc.o
+all: jk-gc-basic.o jk-gc-irqa.o jk-gc-irqe.o jk-gc.o
 
 
-# Default version is now the IRQ hook veriant with buffer at $A000 ...
+# Default version is now the IRQ hook variant with buffer at $A000 ...
+
 $(F).o: $(F)-irqa.o
 	cp -p $(F)-irqa.o $(F).o
+	cp -p $(F)-irqa.l $(F).l
+	cp -p $(F)-irqa.r $(F).r
 
 # create all variants ...
 
 # BASIC ROM copy in RAM patch hook and buffer from $E000 to $FFFF
+
 $(F)-basic.o: $(F).asm debug.asm
-	acme -Dbasic_patch=1 -v3 -f cbm -o $(F)-basic.o -l $(F)-basic.l -r $(F)-basic.r $(F).asm
+	acme -Dstart='$(START)' -Dbasic_patch=1 -v3 -f cbm -o $(F)-basic.o -l $(F)-basic.l -r $(F)-basic.r $(F).asm
 
 # IRQ hook with buffer from $E000 to $FFFF
-$(F)-irqf.o: $(F).asm debug.asm
-	acme -Dno_basic_rom_buffer=1 -v3 -f cbm -o $(F)-irqf.o -l $(F)-irqf.l -r $(F)-irqf.r $(F).asm
+
+$(F)-irqe.o: $(F).asm debug.asm
+	acme  -Dstart='$(START)' -Dno_basic_rom_buffer=1 -v3 -f cbm -o $(F)-irqe.o -l $(F)-irqe.l -r $(F)-irqe.r $(F).asm
 
 # IRQ hook with buffer from $A000 to $BFFF
+
 $(F)-irqa.o: $(F).asm debug.asm
-	acme -Dbasic_rom_buffer=1 -v3 -f cbm -o $(F)-irqa.o -l $(F)-irqa.l -r $(F)-irqa.r $(F).asm
+	acme  -Dstart='$(START)' -Dbasic_rom_buffer=1 -v3 -f cbm -o $(F)-irqa.o -l $(F)-irqa.l -r $(F)-irqa.r $(F).asm
+
 
 
 clean:
-	rm -f *.r *.l *.out *.o
+	rm -f jk-gc-*.r jk-gc-*.l *.out jk-gc-*.o
+
 
 
