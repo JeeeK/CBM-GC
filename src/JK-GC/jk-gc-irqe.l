@@ -5,8 +5,9 @@
 	VARTAB	= $2d
 	GETSA	= $c6a0	; ?
 	DSTACK	= $c6ae
-	MARKECOL	= $dbe7
 	IRQ	= $c524	; ?
+	MARKCHAR	= $2a
+	MARKCPOS	= $dbe7	; ?
 	ARRAY	= $c74d	; ?
 	STAT_VAR	= $3
 	HOOK	= $c512	; ?
@@ -18,7 +19,8 @@
 	BASIC	= $a000	; unused
 	GARBCOL	= $b526	; unused
 	TO_COLLECT	= $c5a9	; ?
-	COLBASE	= $d800
+	COLBASE	= $d800	; ?
+	MARKCOL	= $9
 	CORR_STR	= $c540	; ?
 	CHK_PC	= $c56b	; ?
 	NOCOPY	= $c69d	; ?
@@ -29,7 +31,6 @@
 	LASTRANGE	= $c60c	; ?
 	FRETOP	= $33
 	COPYBACK	= $c676	; ?
-	MARKEVID	= $7e7
 	VAR	= $c6d5
 	NEXTSTR1	= $c636
 	PTR	= $50
@@ -46,11 +47,11 @@
 	EOSS	= $22	; unused
 	GC_PHP_END	= $b598
 	MOVBLOCK	= $c787	; ?
-	MARKE	= $2a
 	ISARREND	= $c718
 	NEXTASTR	= $c74d
 	STAT	= $57
 	SAVLOOP	= $c5d3
+	MARKVPOS	= $7e7	; ?
 	GC_CRIT_START	= $b632
 	NEXTBLOCK	= $c5e7
 	BUFSIZE	= $2000
@@ -59,7 +60,7 @@
 	COLLECT	= $c5bb	; unused
 	NEWPTR	= $4e
 	TOSS	= $19
-	VIDBASE	= $400
+	VIDBASE	= $400	; ?
 	no_basic_rom_buffer	= $1	; unused
 	V_IRQ	= $314
 	MEMEND	= $37
@@ -67,7 +68,6 @@
 	ORIGVID	= $c7bd	; ?
 	TSSP	= $16
 	STREND	= $31
-	MARKEOFF	= $3e7
 	start	= $c500
 	RNGEND	= $5d
 	CHK_SNS	= $c54e	; ?
@@ -82,9 +82,9 @@
 	CHECKVAR	= $c6ea	; ?
 	MEMSIZ	= $37
 	CORR	= $c778	; ?
+	MARKOFF	= $3e7
 	CONT	= $c568	; ?
 	ARRAYS	= $c710	; ?
-	LEN1	= $c662	; unused
 	INSTALL	= $c500	; unused
 	CALLER_OPSP	= $b62a
 	NBENTRY	= $c65f	; ?
@@ -97,6 +97,7 @@
 	ORIGCOL	= $c7be	; ?
 	MEMROM	= $37	; unused
 	RNGBEG	= $4c
+	VIDPAGE	= $288	; unused
 	GC_START	= $b526
 	MEMRAM	= $35
 	NEXTDST	= $c6b0
@@ -104,7 +105,6 @@
 	MEMBAS	= $36	; unused
 	STAT_SDS	= $5
 	copy	= $c7ae	; ?
-	MARKEFARBE	= $9
 	STRPTR	= $33
 	ORIGIRQ	= $c7bf	; ?
 	RESLOOP	= $c618
