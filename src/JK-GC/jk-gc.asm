@@ -77,9 +77,9 @@ TSSP     = $16		; Current String Descriptor Stack pointer
 VARTAB   = $2D		; End of BASIC program = begin of variable area
 ARYTAB   = $2F		; End of variables = begin of arrays
 STREND   = $31		; End of arrays = lowest possible string heap address
-FRETOP   = $33		; current string heap address
+FRETOP   = $33		; Current string heap address
 MEMSIZ   = $37		; Highest RAM address for BASIC, start of
-			; string heap growing downwards
+			; string heap growing downwards.
 MEMBEG   = STREND	; String heap memory begin = STREND
 MEMEND   = MEMSIZ	; String heap memory end
 
@@ -91,11 +91,11 @@ STRPTR   = FRETOP	; String pointer = FRETOP
 STRDP    = $22		; String descriptor address,
 			; overwritten by original MOVBLOCK routine!
 RNGBEG   = $4C		; Region start
-NEWPTR	 = $4E		; new string pointer
+NEWPTR	 = $4E		; New string pointer
 PTR      = $50		; Array pointer
 LEN      = $52		; string length
 ; $54-$56 belegt
-STAT     = $57		; String status, for values in use
+STAT     = $57		; String status, for values in use,
 			; see STAT_* below
 ; $58-5B is overwritten by MOVBLOCK!
 STRADR   = $58		; String address (temp.)
@@ -194,11 +194,11 @@ CPYROM	LDA (CPTR),Y	; Read from ROM
 	LDA PROCPORT	; Switch to RAM
 	AND #%11111110	; "BASIC off" mask
 	STA PROCPORT
-	LDA #<COLLECT	; "JMP COLLECT"
-	STA GARBCOL+1	; is to be patched
+	LDA #<COLLECT	; Write "JMP COLLECT"
+	STA GARBCOL+1	; patch code.
 	LDA #>COLLECT
 	STA GARBCOL+2
-	LDA #$4C	; JMP opcode
+	LDA #$4C	; The "JMP" opcode
 	STA GARBCOL
 	RTS
 } else {
@@ -217,7 +217,7 @@ HOOK
 	STX ORIGIRQ+1
 	LDA #<(IRQ)	; New GC routine ...
 	LDX #>(IRQ)
-	STA V_IRQ	; hooked in
+	STA V_IRQ	; hooked in.
 	STX V_IRQ+1
 INSTEXIT
 	CLI
@@ -329,7 +329,7 @@ CHK_SNS			; We are in "Search for Next String"?
 	CPY #>(CALLER_SNS1)
 			; High byte is the same for all three addresses!
 	!if (  >(CALLER_SNS1) != >(CALLER_SNS2) | >(CALLER_SNS2) != >(CALLER_SNS3) | >(CALLER_SNS1) != >(CALLER_SNS3)) {
-	  !error "High-Byte von CALLER_SNS* sind verschieden. Sie müssen gleich sein!"
+	  !error "High-Byte of CALLER_SNS* are different. They must be all the same!"
 	}
 	BNE CHK_PC	; Check only the low byte of these addresses ...
 	CMP #<(CALLER_SNS1)
@@ -354,15 +354,15 @@ CHK_PC
 	TAY		; High byte
 	LDA $105,X	; Low byte
 	CPY #>(GC_START)
-	BCC CONT	; below GC routine
-	BNE +		; past GC beginning
+	BCC CONT	; Below GC routine
+	BNE +		; Past GC beginning
 	CMP #<(GC_START)
-	BCC CONT	; below GC routine
+	BCC CONT	; Below GC routine
 +	CPY #>(GC_END+1)
-	BCC ++		; in GC routine!
-	BNE CONT	; above GC routine
+	BCC ++		; In GC routine!
+	BNE CONT	; Above GC routine
 	CMP #<(GC_END+1)
-	BCS CONT	; above GC routine
+	BCS CONT	; Above GC routine
 ++
 	; The old GC routine has been interrupted!
 	; Are there any special ranges where further action is required?
@@ -399,7 +399,7 @@ CHK_PC
 	INY		; String length
 	INY		; String address low (is already set!)
 	LDA $59
-	STA ($4E),Y	; just set string address high
+	STA ($4E),Y	; Just set string address high
 
 	; The previous part could theoretically use the descriptor
 	; correction code at CORR_STR, but this is normally called
@@ -482,7 +482,7 @@ SAVLOOP	LDA ZPSTART-1,X	; Index runs from count to 1
 
 NEXTBLOCK
 	LDA STRPTR	; NEWPTR pulled along
-	STA NEWPTR	; with BUFPTR in parallel
+	STA NEWPTR	; with BUFPTR in parallel.
 	LDA STRPTR+1
 	STA NEWPTR+1
 	LDX RNGBEG	; Region already at end
@@ -490,7 +490,7 @@ NEXTBLOCK
 	CPX STREND
 	BNE +
 	CMP STREND+1
-	BEQ EXIT	; yes -> finished
+	BEQ EXIT	; Yes -> finished
 +
 	STX RNGEND	; Move by buffer length - 256
 	STA RNGEND+1	; down to lower addresses.
@@ -498,7 +498,8 @@ NEXTBLOCK
 	  !error "BUFSIZE is not a multiple of 256 ($100)!"
 	}
 	SEC		
-	SBC #(>BUFSIZE-1) ; Region length in pages,
+	SBC #(>BUFSIZE-1)
+			; Region length in pages,
 			; could be exceeded by max. 254 bytes!
 	BCC LASTRANGE	; < 0 = underflow (for sure <STREND)
 	STA RNGBEG+1
@@ -526,7 +527,7 @@ RESLOOP	LDA SAVE-1,X	; Index runs from count to 1
 !ifndef no_indicator {
 	LDA ORIGVID	; Clear activation indicator:
 	STA MARKVPOS	; restore character and its
-	LDA ORIGCOL	; character.
+	LDA ORIGCOL	; color.
 	STA MARKCPOS
 }
 !ifdef debug {
@@ -549,10 +550,10 @@ STRINRANGE
 	STA BUFPTR	; to $10000 (65536) = 0
 	STA BUFPTR+1
 }
-	SEC		; initialize search
+	SEC		; Initialize search
 	!byte $24	; BIT ZP, skip next instruction
 NEXTSTR	
-	CLC		; continue search
+	CLC		; Continue search
 NEXTSTR1
 	JSR GETSA	; Fetch next string address
 	BEQ COPYBACK	; No String found anymore
@@ -561,7 +562,7 @@ NEXTSTR1
 	TYA		; High byte
 	CPX RNGEND	; X/A >= RNGEND:
 	SBC RNGEND+1	; Above region, try
-	BCS NEXTSTR	; next String!
+	BCS NEXTSTR	; next string!
 
 	TYA		; High Byte
 	CPX RNGBEG	; X/A < RNGBEG:
@@ -570,17 +571,17 @@ NEXTSTR1
 			; Within the region:
 	LDA BUFPTR	; Carry flag always set
 	SBC LEN		; Buffer pointer moved
-	STA BUFPTR	; down by string length
+	STA BUFPTR	; down by string length.
 	BCS +		; Check high byte overflow
 	DEC BUFPTR+1
 
 +	STY STRADR+1	; Save as string address
-	STX STRADR	; for copy action
+	STX STRADR	; for copy action.
 
 	LDY LEN		; String length (always > 0)
 	BNE NBENTRY	; Always start with decrement
 NEXTBYT	LDA (STRADR),Y	; Copy string to buffer,
-	STA (BUFPTR),Y	; write through to RAM below ROM
+	STA (BUFPTR),Y	; write through to RAM below ROM.
 NBENTRY	DEY		; Index and counter
 	BNE NEXTBYT
 	LDA (STRADR),Y	; Also the 0th byte,
@@ -589,13 +590,13 @@ NBENTRY	DEY		; Index and counter
 	SEC		; New string address:
 	LDA NEWPTR	; Simply pull along
 	SBC LEN		; the pointer, by
-	STA NEWPTR	; subtract the length
+	STA NEWPTR	; subtract the length.
 	BCS +		; 
 	DEC NEWPTR+1	; High byte overflow
 +
 	JSR CORR	; Fix the string address in the
 			; descriptor, Z=0 on leave.
-	BNE NEXTSTR	; always, continue with next string
+	BNE NEXTSTR	; Always, continue with next string
 
 
 ; *** Transfer buffer back to the string heap
@@ -616,14 +617,14 @@ COPYBACK
 	BNE +
 	LDA BUFPTR+1	; if pointer is still on end
 	CMP #>(BUF+BUFSIZE)
-	BEQ NOCOPY	; Skip copy if buffer is empty
-+			; to NEXTBLOCK, far branch needed
+	BEQ NOCOPY	; Skip copy if buffer is empty,
++			; to NEXTBLOCK, far branch needed.
 } else {
 			; Special case: buffer end at $FFFF
 	LDA BUFPTR	; Buffer empty
 	ORA BUFPTR+1	; if pointer is 0 (at end).
-	BEQ NOCOPY	; Skip copy if buffer is empty
-			; to NEXTBLOCK, far branch needed
+	BEQ NOCOPY	; Skip copy if buffer is empty,
+			; to NEXTBLOCK, far branch needed.
 }
 
 !ifdef orig_movblock {
@@ -634,19 +635,19 @@ COPYBACK
 	LDX NEWPTR+1	; destination block start
 }
 	STA $58		; = STRADR,
-	STX $59		; depending on MOVBLOCK variant
-			; end+1 or begin of destination block
+	STX $59		; Depending on MOVBLOCK variant
+			; end+1 or begin of destination block.
 
 !ifdef orig_movblock {
 	LDA NEWPTR	; For original MOVBLOCK only,
-	LDX NEWPTR+1	; otherwise already in A/X
+	LDX NEWPTR+1	; otherwise already in A/X.
 }
-	STA STRPTR	; new FRETOP so far
+	STA STRPTR	; New FRETOP so far
 	STX STRPTR+1
 
 !if ((BUF+BUFSIZE) and $FFFF) != 0  {
 	LDA #<(BUF+BUFSIZE)
-	STA $5A		; source block end+1
+	STA $5A		; Source block end+1
 	LDA #>(BUF+BUFSIZE)
 	STA $5B
 } else {
@@ -757,18 +758,12 @@ CHECKVAR
 	BMI NEXTVAR	; No string, to next variable
 	INY
 	LDA (STRDP),Y	; 2nd character, type in bit 7
-	BPL NEXTVAR	; no string, to next variable
+	BPL NEXTVAR	; No string, to next variable
 	INY
 	LDA (STRDP),Y	; String length
 	BEQ NEXTVAR	; = 0, to next variable
-	STA LEN		; Return value: length
-	INY
-	LDA (STRDP),Y	; String address low
-	TAX
-	INY
-	LDA (STRDP),Y	; String address high
-	TAY		; Always not zero, Z=0
-	RTS		; Return address in X/Y
+	BNE RETGETSA
+
 CHECKTYPE
 	LDA STAT	; GETSA intro with C=0
 	CMP #STAT_VAR	; String status?
@@ -779,7 +774,7 @@ CHECKTYPE
 ; *** Look up arrays: ARYTAB to STREND
 
 ARRAYS	STA PTR		; A/X set from simple variable processing,
-	STX PTR+1	; pointing the start of arrays
+	STX PTR+1	; pointing the start of arrays.
 	LDY #STAT_ARY
 	STY STAT	; Set status to arrays
 ISARREND
@@ -788,7 +783,7 @@ ISARREND
 CHKAEND	CPX STREND+1	; End of array area?
         BNE NEXTARR
 	CMP STREND	; High byte matches, low byte is
-			; Less or equal
+			; less or equal.
 	BEQ NOSTRING	; Arrays finished -> no string
 NEXTARR
 			; Carry always cleared because of CPX/CMP
@@ -835,6 +830,7 @@ IS0ASTR
 	LDY #0
 	LDA (STRDP),Y	; String length
 	BEQ NEXTASTR	; Next array element
+RETGETSA
 	STA LEN		; Return value: length
 	INY
 	LDA (STRDP),Y	; String address low
@@ -844,8 +840,8 @@ IS0ASTR
 	TAY		; Always not zero, Z=0
 	RTS		; Return address in X/Y
 NOSTRING
-	LDA #0		; Länge 0 
-	STA LEN		; kein String gefunden
+	LDA #0		; Length 0 
+	STA LEN		; No string found
 	RTS		; Z=1
 
 ;
@@ -960,7 +956,7 @@ MOVBLOCK
         LDA $5B       ; End address high
         SBC $60       ; Minus begin address high
         TAX           ; Length high
-        INX           ; Länge als DEC-DEC-Counter
+        INX           ; Length as DEC-DEC counter
         TYA           ; Length low
         BEQ +         ; If not zero, then correct
         LDA $5A       ; the end address by low-byte offset

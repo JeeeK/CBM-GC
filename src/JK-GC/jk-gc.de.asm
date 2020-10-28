@@ -501,7 +501,8 @@ NEXTBLOCK
 	  !error "BUFSIZE ist nicht ein Vielfaches von 256 ($100)!"
 	}
 	SEC		
-	SBC #(>BUFSIZE-1) ; Bereichslänge in Pages,
+	SBC #(>BUFSIZE-1)
+			; Bereichslänge in Pages,
 			; kann um 254 Bytes überragt werden!
 	BCC LASTRANGE	; < 0 = Unterlauf (also auch <STREND)
 	STA RNGBEG+1
