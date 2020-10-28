@@ -18,9 +18,9 @@ End:
 			End             last address used
 	Variant         hex     dec     hex     dec
 	-------------------------------------------------
-	supergc-basic	$C705	50949	$C70B	50955
-	supergc-a000	$C7CB	51147	$C7D1	51153
-	supergc-e000	$C7C1	51137	$C7C7	51143
+        supergc-basic   $C6FC   50940   $C702   50946   
+        supergc-a000    $C7C2   51138   $C7C8   51144   
+        supergc-e000    $C7B8   51128   $C7BE   51134   
 
 
 

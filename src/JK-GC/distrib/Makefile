@@ -50,6 +50,9 @@ supergc-e000.prg: ../jk-gc-irqe.o
 	cp -p "$<" "$@"
 
 
+docu:
+	@../../../tools/distrib_show_end_addresses.pl
+
 
 clean:
 	rm -f *.d64 *.prg

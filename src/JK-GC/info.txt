@@ -64,7 +64,7 @@ version was used from 1985 on.
 	the GC is running.
 	See chapter Debugging below.
 
-2020-10-10 VERS. 2.2	feature version with new IRQ hook method
+2020-10-28 VERS. 2.2	feature version with new IRQ hook method
 
 	The new IRQ hook method comes without the need for a RAM copy of
 	the BASIC ROM and without patching the legacy GC routine. An
@@ -72,7 +72,6 @@ version was used from 1985 on.
 	is taken over by the new routine (on the fly). Advantage: RAM
 	below the BASIC ROM is left for other usage, or could be used as
 	the GC buffer (instead of $E000 to $FFFF).
-
 	An already existing IRQ handler hook is chained up.
 
         From the source code these 3 variants could be derived:
@@ -80,9 +79,11 @@ version was used from 1985 on.
           2. the IRQ hook method with buffer at $A000-$BFFF
           3. the IRQ hook method with buffer at $E000-$FFFF
 
-	(organisational improvement: configurable start address,
+	Organisational improvements: configurable start address,
 	english-only source labels, comments, assertions checks
-	for option combinations)
+	for option combinations.
+	
+	Size reduced by code reuse.
 
 
 
