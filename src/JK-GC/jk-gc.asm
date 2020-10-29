@@ -435,22 +435,37 @@ COLLECT
 !ifdef debug {
 	JSR gra_on	; Enable graphic (buffer visualization)
 }
-!ifndef no_indicator {
-	LDA MARKVPOS	; Activity indicator on screen:
-	STA ORIGVID	; Save current character
-	LDA #MARKCHAR
-	STA MARKVPOS	; Set mark character
-	LDA MARKCPOS	; Same for the color information
-	STA ORIGCOL	; Save current color
-	LDA #MARKCOL
-	STA MARKCPOS	; Set mark color
-}
+
 	; save zero-page
 	LDX #ZPLEN	; Counter and index
 SAVLOOP	LDA ZPSTART-1,X	; Index runs from count to 1
 	STA SAVE-1,X	; Save area
 	DEX
 	BNE SAVLOOP
+
+!ifndef no_indicator {
+			; X is zero from before!
+	STX CPTR	; Pointer low byte = 0
+	LDX VIDPAGE	; Startpage of video RAM
+	!if (>MARKOFF) >= 1 {
+	INX
+	!if (>MARKOFF) >= 2 {
+	INX
+	!if (>MARKOFF) >= 3 {
+	INX
+	} } }
+	; X contains now the page plus the offset's high byte
+	STX CPTR+1
+	LDY #<(MARKOFF)
+	LDA (CPTR),Y	; Activity indicator on screen:
+	STA ORIGVID	; Save current character
+	LDA #MARKCHAR
+	STA (CPTR),Y	; Set mark character
+	LDA MARKCPOS	; Same for the color information
+	STA ORIGCOL	; Save current color
+	LDA #MARKCOL
+	STA MARKCPOS	; Set mark color
+}
 
 	LDA MEMEND	; Set string pointer
 	LDX MEMEND+1	; and region start
@@ -525,9 +540,22 @@ RESLOOP	LDA SAVE-1,X	; Index runs from count to 1
 	BNE RESLOOP
 
 !ifndef no_indicator {
+			; X is zero from before!
+	STX CPTR	; Pointer low byte = 0
+	LDX VIDPAGE	; Startpage of video RAM
+	!if (>MARKOFF) >= 1 {
+	INX
+	!if (>MARKOFF) >= 2 {
+	INX
+	!if (>MARKOFF) >= 3 {
+	INX
+	} } }
+	; X contains now the page plus the offset's high byte
+	STX CPTR+1
+	LDY #<(MARKOFF)
 	LDA ORIGVID	; Clear activation indicator:
-	STA MARKVPOS	; restore character and its
-	LDA ORIGCOL	; color.
+	STA (CPTR),Y	; restore character on screen
+	LDA ORIGCOL	; and its color.
 	STA MARKCPOS
 }
 !ifdef debug {

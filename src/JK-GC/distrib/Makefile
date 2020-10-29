@@ -28,11 +28,11 @@ image $(IMAGES)/$(F).d64: $(PRGS)
 
 gc-test.prg: ../progs/gc-test.bas
 	cp -p $< .
-	$(TOOLS)/bas2prg -f gc-test.bas
+	$(TOOLS)/bas2prg -f gc-test.bas ; rm -f gc-test.bas
 
 gc-demo.prg: ../progs/gc-demo.bas
 	cp -p $< .
-	$(TOOLS)/bas2prg -f gc-demo.bas
+	$(TOOLS)/bas2prg -f gc-demo.bas ; rm -f gc-demo.bas
 
 supergc-loader.prg: supergc-loader.bas
 	$(TOOLS)/bas2prg -f $<
