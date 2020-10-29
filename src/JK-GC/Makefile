@@ -44,9 +44,17 @@ $(F)-irqa.o: $(F).asm debug.asm
 	acme  -Dstart='$(START)' -Dbasic_rom_buffer=1 -v3 -f cbm -o $(F)-irqa.o -l $(F)-irqa.l -r $(F)-irqa.r $(F).asm
 
 
-
 clean:
 	rm -f jk-gc-*.r jk-gc-*.l *.out jk-gc-*.o
 
+
+# Source code checks
+
+# any code differences between english and german version?
+check:
+	sed -e 's/;.*//' jk-gc.asm > 1 ;\
+	sed -e 's/;.*//' jk-gc.de.asm > 2 ;\
+	diff -wB 1 2 ;\
+	rm -f 1 2
 
 

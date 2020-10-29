@@ -6,7 +6,7 @@
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
 ; * 2019-02-15 VERS. 2.1  *
-; * 2020-10-10 VERS. 2.2  *
+; * 2020-10-28 VERS. 2.2  *
 ; *************************
 ;
 ; Räumt Stringspeicher auf, indem Lücken von unbenutzten String
@@ -162,12 +162,12 @@ PROCPORT = $01		; Prozessorport
 
 INSTALL
 
-	BIT $0000	; Argument hält die Kennung
-			; quasi als NOP-Befehl.
-	* = *-2		; Operand überschreiben!
-	!text "GC"	; Kennung für Ladetest,
-			; für alle Varianten an gleicher
-			; gleicher Stelle!
+	!byte $2C	; Opcode von BIT absolute, Argument
+			; enthält die Signature, wirkt als NOP
+	!text "GC"	; Signatur für den BASIC-Loader,
+			; immer an gleicher Stelle für
+			; alle Varianten!
+
 !ifdef basic_patch {
 
 	; BASIC-ROM/RAM-Patch-Einbindung
@@ -438,22 +438,37 @@ COLLECT
 !ifdef debug {
 	JSR gra_on	; Grafik (Puffervisualisierung) aktivieren
 }
-!ifndef no_indicator {
-	LDA MARKVPOS	; Kontrollanzeige Bildschirm
-	STA ORIGVID	; altes Zeichen sichern
-	LDA #MARKCHAR
-	STA MARKVPOS	; Zeichen der Marke setzen
-	LDA MARKCPOS	; gleiches für die Farbe
-	STA ORIGCOL	; sichern
-	LDA #MARKCOL
-	STA MARKCPOS	; Farbe der Marke setzen
-}
+
 	; Zeropage-Register
 	LDX #ZPLEN	; Anzahl und Index
 SAVLOOP	LDA ZPSTART-1,X	; Index geht von Anzahl bis 1
 	STA SAVE-1,X	; retten
 	DEX
 	BNE SAVLOOP
+
+!ifndef no_indicator {
+			; X ist 0 wegen Code davor!
+	STX CPTR	; Zeiger Low-Byte = 0
+	LDX VIDPAGE	; Start-Page des Video-RAMs
+	!if (>MARKOFF) >= 1 {
+	INX
+	!if (>MARKOFF) >= 2 {
+	INX
+	!if (>MARKOFF) >= 3 {
+	INX
+	} } }
+	; X enthält die Basis-Page und die Pages des Offsets
+	STX CPTR+1
+	LDY #<(MARKOFF)
+	LDA (CPTR),Y	; Kontrollanzeige Bildschirm
+	STA ORIGVID	; altes Zeichen sichern
+	LDA #MARKCHAR
+	STA (CPTR),Y	; Zeichen der Marke setzen
+	LDA MARKCPOS	; gleiches für die Farbe
+	STA ORIGCOL	; Farbe sichern
+	LDA #MARKCOL
+	STA MARKCPOS	; Farbe der Marke setzen
+}
 
 	LDA MEMEND	; String-Pointer
 	LDX MEMEND+1	; und Bereichanfang 
@@ -528,8 +543,21 @@ RESLOOP	LDA SAVE-1,X	; Index geht von Anzahl bis 1
 	BNE RESLOOP
 
 !ifndef no_indicator {
+			; X ist 0 wegen Code davor!
+	STX CPTR	; Zeiger Low-Byte = 0
+	LDX VIDPAGE	; Start-Page des Video-RAMs
+	!if (>MARKOFF) >= 1 {
+	INX
+	!if (>MARKOFF) >= 2 {
+	INX
+	!if (>MARKOFF) >= 3 {
+	INX
+	} } }
+	; X enthält die Basis-Page und die Pages des Offsets
+	STX CPTR+1
+	LDY #<(MARKOFF)
 	LDA ORIGVID	; Kontrollanzeige löschen
-	STA MARKVPOS	; und alten Zustand wieder
+	STA (CPTR),Y	; und alten Zustand wieder
 	LDA ORIGCOL	; herstellen.
 	STA MARKCPOS
 }
@@ -765,14 +793,7 @@ CHECKVAR
 	INY
 	LDA (STRDP),Y	; String-Länge
 	BEQ NEXTVAR	; = 0, nächste Variable
-	STA LEN		; Rückgabevariable
-	INY
-	LDA (STRDP),Y	; String-Adresse low
-	TAX
-	INY
-	LDA (STRDP),Y	; String-Adresse high
-	TAY		; immer ungleich 0, Z=0
-	RTS		; Adresse in X/Y retour
+	BNE RETGETSA
 
 CHECKTYPE
 	LDA STAT	; GETSA-Einstieg mit C=0
@@ -840,6 +861,7 @@ IS0ASTR
 	LDY #0
 	LDA (STRDP),Y	; String-Länge
 	BEQ NEXTASTR	; weiter im Array
+RETGETSA
 	STA LEN		; Rückgabevariable
 	INY
 	LDA (STRDP),Y	; String-Adresse low
