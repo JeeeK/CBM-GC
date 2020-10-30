@@ -83,7 +83,8 @@ version was used from 1985 on.
 	english-only source labels, comments, assertions checks
 	for option combinations.
 	
-	Size reduced by code reuse.
+	Reuse of some code part.
+	Activity indicator uses the BASIC video RAM information.
 
 
 
@@ -102,8 +103,15 @@ acme/			original version in ACME cross assembler
 			syntax,
 			see also section "Assembling with ACME"
 
+distrib/		build environment for the SuperGC
+			distribution D64 image
+			supergc-2020-distrib.d64
+
 hypraass/		original version in HypraAss assembler
 			syntax
+
+progs/			Test and demo programs, used
+			in the distribution image.
 
 Makefile		assemble the program variants,
 			see section "Making" below
@@ -218,6 +226,127 @@ For BASIC hook:
 Switch back from RAM to ROM:
 
 poke1,55
+
+
+
+Timing considerations
+---------------------
+
+There are several programs on the 
+distribution image supergc-2020-distrib.d64
+showing some timing values which can
+be compared to the legacy garbage collector.
+
+Tested on GTK VICE 3.4 on Windows 10 with x64sc
+executable.
+
+
+gc-test
+- - - -
+
+Simply collect 5000 strings.
+
+Screen:
+________________________________________
+free string space:      23472
+array setup ...
+garbage collection ...
+ 18471 bytes free
+time  (ticks/hhmmss) :  124/000002
+________________________________________
+
+In comparison to the a system with legacy 
+garbage collection:
+________________________________________
+time  (ticks/hhmmss) :  122011/003353
+________________________________________
+
+Speedup factor: 984
+
+
+gc-demo
+- - - -
+
+This program constructs a stress situation
+for string management which provokes a
+high rate of calls of the garbage collector.
+
+
+Screen: From start until the near finish:
+________________________________________
+garbage collection demo
+
+string overhead: 0
+array element length: 3
+element overhead: 3
+memory reduced by: 24962
+free string memory: 9712
+                    ....................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+........................................
+.......................................*
+________________________________________
+
+
+Screen: (partial) with timing data:
+________________________________________
+rtc: 143
+ti: 5877 ti$: 000137          free: 20
+________________________________________
+
+In comparison to the a system with legacy 
+garbage collection:
+________________________________________
+rtc: 2622.1
+ti: 94936 ti$: 002622         free: 20
+________________________________________
+
+Speedup factor: approx. 15
+
+________________________________________
+
+Screen: Final output of the string array,
+	to check if the strings are ok.
+________________________________________
+---------- 638---------- 639---------- 6
+40---------- 641---------- 642----------
+ 643---------- 644---------- 645--------
+-- 646---------- 647---------- 648------
+---- 649---------- 650---------- 651----
+------ 652---------- 653---------- 654--
+-------- 655---------- 656---------- 657
+---------- 658---------- 659---------- 6
+60---------- 661---------- 662----------
+ 663---------- 664---------- 665--------
+-- 666---------- 667---------- 668------
+---- 669---------- 670---------- 671----
+------ 672---------- 673---------- 674--
+-------- 675---------- 676---------- 677
+---------- 678---------- 679---------- 6
+80---------- 681---------- 682----------
+ 683---------- 684---------- 685--------
+-- 686---------- 687---------- 688------
+---- 689---------- 690---------- 691----
+------ 692---------- 693---------- 694--
+-------- 695---------- 696---------- 697
+---------- 698---------- 699---------- 7
+00----------
+ready.
+________________________________________
 
 
 

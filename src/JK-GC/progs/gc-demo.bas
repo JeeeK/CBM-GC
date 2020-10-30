@@ -41,7 +41,7 @@
   130 fori=1toa:a$(i)=str$(i):forj=1to10:a$(i)=a$(i)+a$:next:print".";:next
   140 print
   150 ifrtthenprint"rtc:";:gosub7
-  160 print"ti:"ti;"ti$:"ti$,"frei:"fnf(1)
+  160 print"ti:"ti;"ti$: "ti$,"free:"fnf(1)
   170 geta$:ifa$=""goto170
   180 print
   190 fori=1toa:printa$(i);:next
