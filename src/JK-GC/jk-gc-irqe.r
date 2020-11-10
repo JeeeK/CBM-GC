@@ -8,7 +8,7 @@
      6                          ; * 1985-12-27 VERS. 1.1  *
      7                          ; * 2013-11-24 VERS. 2.0  *
      8                          ; * 2019-02-15 VERS. 2.1  *
-     9                          ; * 2020-10-10 VERS. 2.2  *
+     9                          ; * 2020-10-28 VERS. 2.2  *
     10                          ; *************************
     11                          ;
     12                          ; Collects unused (garbage) strings on the string heap,
