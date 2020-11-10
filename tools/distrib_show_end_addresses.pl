@@ -19,7 +19,12 @@ my %rewritenames = (
 $save_bytes = 6;
 
 
-open(F,"grep SAVE ../jk-gc-*.l|") || die("List files missing!\n");
+$DIR = '..';
+if ( -f '../JK-GC/jk-gc-basic.l' ) {
+	$DIR = '../JK-GC';
+}
+
+open(F,"grep SAVE $DIR/jk-gc-*.l|") || die("List files missing!\n");
 
 while(<F>) {
 	m|^[./]*(\S+)\s+SAVE\s*=\s*\$([\da-f]{4})|i && do {

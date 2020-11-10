@@ -5,9 +5,9 @@
 # ACME cross-assembler environment
 #
 
-VERSION=2.2-rel2-2020-10-10-New
+VERSION=2.2-rel2-2020-10-28-New
 
-# Startadresse SuperGC
+# Start address SuperGC
 START = $$C500
 
 
