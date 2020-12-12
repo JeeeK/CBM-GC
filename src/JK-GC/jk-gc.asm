@@ -6,7 +6,7 @@
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
 ; * 2019-02-15 VERS. 2.1  *
-; * 2020-10-28 VERS. 2.2  *
+; * 2020-12-12 VERS. 2.2  *
 ; *************************
 ;
 ; Collects unused (garbage) strings on the string heap,
@@ -231,7 +231,12 @@ INSTEXIT
 ; Particular states have to be handled with a correction of the state
 ; for these cases:
 ;   1. If the PC lies within the range from GC_CRIT_START ot GC_CRIT_END
-;      the string descriptor is inconsistent -> set the high byte:
+;      the string descriptor is inconsistent.
+;      $59 is already incremented if GC_CRIT_59 is reached, otherwise
+;      an additional
+;         INC $59
+;      is needed.
+;      Set the high byte:
 ;         LDY $55
 ;         INY
 ;         INY
@@ -269,6 +274,7 @@ GC_END        = $B63C
 GC_CRIT_START = $B632	; PC within this range -> 
 			; descriptor has to be corrected!
 GC_CRIT_END   = $B638
+GC_CRIT_59    = $B635   ; PC beginning with this addr.: $59 is correct
 GC_PHP_START  = $B58A	; PC within this range -> 
 			; remove SR (coming from a PHP) from stack!
 GC_PHP_END    = $B598	; Location of the PLP instruction
@@ -319,8 +325,9 @@ CORR_STR
 	LDA $58		; Put string address low
 	STA ($4E),Y	; into the descriptor
 	INY
-	LDA $59		; Put string address high
-	STA ($4E),Y	; into the descriptor
+	INC $59		; String address high from MOVBLOCK
+	LDA $59		; is one page below, so correct it
+	STA ($4E),Y	; and put it into the descriptor
 	BNE START_COLLECT
 			; Branch always, because always >0
 
@@ -395,10 +402,16 @@ CHK_PC
 	; Descriptor correction: set the descriptor's high byte with the
 	; string address, the low byte has been already set.
 	; Otherwise the address in the descriptor would be incosistent!
-	LDY $55		; Descriptor offset
+	; Caution: The content of $59 is starting with GC_CRIT_59 already
+	; right, but otherwise it has to be corrected by adding 1.
+ 
+	CMP #<(GC_CRIT_59)
+	BCS ++          ; $59 already incremented,
+	INC $59         ; otherwise correct it!
+++	LDY $55		; Descriptor offset
 	INY		; String length
 	INY		; String address low (is already set!)
-	LDA $59
+	LDA $59		; MOVBLOCK high byte, one page to below!
 	STA ($4E),Y	; Just set string address high
 
 	; The previous part could theoretically use the descriptor
@@ -970,7 +983,7 @@ copy    LDA ($5F),Y   ; Copy source
 	;	 $5A/$5B source end address+1
 	;	 $58/$59 destination end address+1
 	; Destroyed: A, X, Y
-	; Output: $58/$59 has the value destination end address +1
+	; Output: $58/$59 has the value destination end address+1-256
 	;          X = 0
 	;	   Y = 0 (if the block length is greater 0)
 	;	   Z-flag = 1

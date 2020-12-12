@@ -6,7 +6,7 @@
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
 ; * 2019-02-15 VERS. 2.1  *
-; * 2020-10-28 VERS. 2.2  *
+; * 2020-12-12 VERS. 2.2  *
 ; *************************
 ;
 ; Räumt Stringspeicher auf, indem Lücken von unbenutzten String
@@ -232,7 +232,12 @@ INSTEXIT
 ; Gewisse Zustände müssen dabei allerings korrigiert werden.
 ; Korrekturfälle:
 ;   1. Wenn der PC im Bereich von GC_CRIT_START bis GC_CRIT_END liegt,
-;      ist der Descriptor inkonsistent -> High-Byte setzen:
+;      ist der Descriptor inkonsistent.
+;      $59 ist already incremented if GC_CRIT_59 is reached, otherwise
+;      an additional
+;         INC $59
+;      is needed.
+;      High-Byte setzen:
 ;         LDY $55
 ;         INY
 ;         INY
@@ -271,6 +276,7 @@ GC_END        = $B63C
 GC_CRIT_START = $B632	; PC in diesem Bereich -> 
 			; Descriptor muss korrigiert werden!
 GC_CRIT_END   = $B638
+GC_CRIT_59    = $B635	; PC ab dieser Adresse: $59 ist korrekt 
 GC_PHP_START  = $B58A	; PC in diesem Bereich -> 
 			; SR (von PHP) vom Stack nehmen!
 GC_PHP_END    = $B598	; hier ist das PLP
@@ -321,7 +327,8 @@ CORR_STR
 	LDA $58		; String-Adresse low
 	STA ($4E),Y	; in den Descriptor
 	INY
-	LDA $59		; String-Adresse high
+	INC $59		; String-Adresse high von MOVBLOCK
+	LDA $59		; ist eine Page darunter, also korrigieren!
 	STA ($4E),Y	; nun String-Adresse high setzen
 	BNE START_COLLECT
 			; immer, weil immer >0
@@ -396,11 +403,17 @@ CHK_PC
 
 	; Korrektur, High Byte der String-Adresse in Descriptor setzen,
 	; weil bereits das Low-Byte gesetzt wurde. Die Adresse im Descriptor
-	; wäre sonst inkonsistent!
-	LDY $55		; Offset des Descriptors
+	; wäre sonst inkonsistent! Aber aufpassen: Der Inhalt von $59
+	; ist ab GC_CRIT_59 schon richtig, sonst muss er korrigiert, also
+	; also um 1 erhöht werden!
+
+	CMP #<(GC_CRIT_59)
+	BCS ++		; $59 bereits erhöht,
+	INC $59		; sonst korrigieren!
+++	LDY $55		; Offset des Descriptors
 	INY		; String-Länge
 	INY		; String-Adresse-Low (ist schon gesetzt!)
-	LDA $59
+	LDA $59		; String-Adresse-High von MOVBLOCK
 	STA ($4E),Y	; nun String-Adresse-High setzen
 
 	; Der obige Teil könnte theoretisch auch die Descriptorkorrektur
@@ -910,7 +923,7 @@ CORR	LDA STAT	; String-Status
 	;	   $5A/$5B Endadresse+1 der Quelle
 	;	   $58/$59 Startadresse Ziel
 	; Zerstört: A, X, Y
-	; Ausgabe: $58/$59 hat den Wert Zielendadresse+1
+	; Ausgabe: $58/$59 hat den Wert Zielendadresse+1-256
 	;          X = 0
 	;	   Y = 0 (wenn die Bereichslänge > 0 ist)
 	;	   Z-Flag = 1

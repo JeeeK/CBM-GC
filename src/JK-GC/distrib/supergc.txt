@@ -1,6 +1,6 @@
 Super Garbage Collection Distribution 2020
 ==========================================
-2020-10-28 Johann E. Klasek johann AT klasek at
+2020-12-12 Johann E. Klasek johann AT klasek at
 
 Based on SuperGC (JK-GC) V2.2
 
@@ -18,9 +18,9 @@ End:
 			End             last address used
 	Variant         hex     dec     hex     dec
 	-------------------------------------------------
-        supergc-basic   $C711   50961   $C717   50967   
-        supergc-a000    $C7D7   51159   $C7DD   51165   
-        supergc-e000    $C7CD   51149   $C7D3   51155   
+        supergc-basic   $C711   50961   $C717   50967
+        supergc-a000    $C7DF   51167   $C7E5   51173
+        supergc-e000    $C7D5   51157   $C7DB   51163
 
 
 
