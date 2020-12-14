@@ -8,7 +8,7 @@
      6                          ; * 1985-12-27 VERS. 1.1  *
      7                          ; * 2013-11-24 VERS. 2.0  *
      8                          ; * 2019-02-15 VERS. 2.1  *
-     9                          ; * 2020-12-12 VERS. 2.2  *
+     9                          ; * 2020-12-14 VERS. 2.2  *
     10                          ; *************************
     11                          ;
     12                          ; Collects unused (garbage) strings on the string heap,
@@ -288,760 +288,759 @@
    286                          CALLER_SNS3   = $B5B8+2
    287                          
    288                          IRQ
-   289  c524 78                 	SEI
-   290                          
-   291                          	; IRQ stack frame:
-   292                          	; $104,X status register
-   293                          	; $105,X low byte PC
-   294                          	; $106,X high byte PC
-   295                          	; possibly the calling routine:
-   296                          	; $107,X low byte of the caller (return-PC)-1
-   297                          	; $108,X high byte of the caller (return-PC)-1
-   298                          
-   299  c525 bd0801             	LDA $108,X	; Caller's PC high
-   300  c528 a8                 	TAY
-   301  c529 bd0701             	LDA $107,X	; Caller's PC low
-   302                          	; callers return-PC-1 in A/Y
-   303                          			; Are we in "Open Space"?
-   304  c52c c92a               	CMP #<(CALLER_OPSP)
-   305  c52e d020               	BNE CHK_SNS
-   306  c530 c0b6               	CPY #>(CALLER_OPSP)
-   307  c532 d01c               	BNE CHK_SNS
-   308                          IN_OPSP
-   309                          	; Go back with RTI to the interrupted
-   310                          	; copy-routine to ensure that the string
-   311                          	; is completely moved. The return address
-   312                          	; used by the following RTS passes control
-   313                          	; to the correction routine (for the
-   314                          	; descriptor) to finally start with the
-   315                          	; new GC.
-   316  c534 a93f               	LDA #<(CORR_STR-1)
-   317  c536 9d0701             	STA $107,X	; RTS expects the address-1 on stack
-   318  c539 a9c5               	LDA #>(CORR_STR-1)
-   319  c53b 9d0801             	STA $108,X	; Always >0
-   320  c53e d02a               	BNE CONT	; Always go back by RTI
-   321                          
-   322                          CORR_STR
-   323  c540 a455               	LDY $55		; Descriptor offset
-   324  c542 c8                 	INY		; String length
-   325  c543 a558               	LDA $58		; Put string address low
-   326  c545 914e               	STA ($4E),Y	; into the descriptor
-   327  c547 c8                 	INY
-   328  c548 e659               	INC $59		; String address high from MOVBLOCK
-   329  c54a a559               	LDA $59		; is one page below, so correct it
-   330  c54c 914e               	STA ($4E),Y	; and put it into the descriptor
-   331  c54e d06f               	BNE START_COLLECT
-   332                          			; Branch always, because always >0
-   333                          
-   334                          	
-   335                          CHK_SNS			; We are in "Search for Next String"?
-   336  c550 c0b5               	CPY #>(CALLER_SNS1)
-   337                          			; High byte is the same for all three addresses!
-   338                          	!if (  >(CALLER_SNS1) != >(CALLER_SNS2) | >(CALLER_SNS2) != >(CALLER_SNS3) | >(CALLER_SNS1) != >(CALLER_SNS3)) {
-   339                          	  !error "High-Byte of CALLER_SNS* are different. They must be all the same!"
-   340                          	}
-   341  c552 d019               	BNE CHK_PC	; Check only the low byte of these addresses ...
-   342  c554 c963               	CMP #<(CALLER_SNS1)
-   343  c556 f008               	BEQ IN_SUB
-   344  c558 c94a               	CMP #<(CALLER_SNS2)
-   345  c55a f004               	BEQ IN_SUB
-   346  c55c c9ba               	CMP #<(CALLER_SNS3)
-   347  c55e d00d               	BNE CHK_PC
-   348                          
-   349                          IN_SUB
-   350  c560 a9bd               	LDA #<(SKIPSUB) ; Redirect by changing the interruption PC
-   351  c562 9d0501             	STA $105,X	; Low byte
-   352  c565 a9c5               	LDA #>(SKIPSUB)
-   353  c567 9d0601             	STA $106,X	; High byte
-   354                          			; The following RTI branches to SKIPSUB
-   355                          			; where the caller's address is taken from stack.
-   356                          
-   357  c56a 6cd3c7             CONT	JMP (ORIGIRQ)	; Pass control to the pre-hooked code (chain).
-   358                          
-   359                          CHK_PC
-   360  c56d bd0601             	LDA $106,X	; Check interruption PC
-   361  c570 a8                 	TAY		; High byte
-   362  c571 bd0501             	LDA $105,X	; Low byte
-   363  c574 c0b5               	CPY #>(GC_START)
-   364  c576 90f2               	BCC CONT	; Below GC routine
-   365  c578 d004               	BNE +		; Past GC beginning
-   366  c57a c926               	CMP #<(GC_START)
-   367  c57c 90ec               	BCC CONT	; Below GC routine
-   368  c57e c0b6               +	CPY #>(GC_END+1)
-   369  c580 9006               	BCC ++		; In GC routine!
-   370  c582 d0e6               	BNE CONT	; Above GC routine
-   371  c584 c93d               	CMP #<(GC_END+1)
-   372  c586 b0e2               	BCS CONT	; Above GC routine
-   373                          ++
-   374                          	; The old GC routine has been interrupted!
-   375                          	; Are there any special ranges where further action is required?
-   376                          
-   377                          	; In PHP/PLP section?
-   378                          	!if >(GC_PHP_START) != >(GC_PHP_END+1) {
-   379                          	  !error "High byte of GC_PHP_START and GC_PHP_END differs!"
-   380                          	}
-   381  c588 c0b5               	CPY #>(GC_PHP_START)
-   382  c58a d00b               	BNE +		; Not in right page, to next range test
-   383  c58c c98a               	CMP #<(GC_PHP_START)
-   384  c58e 9007               	BCC +		; Below, no stack correction
-   385  c590 c999               	CMP #<(GC_PHP_END+1)
-   386  c592 b003               	BCS +		; Above, no stack correction
-   387                          	; Stack-Korrektur:
-   388  c594 68                 	PLA		; Remove SR from stack, N and Z changed, but not C
-   389  c595 901a               	BCC TO_COLLECT	; C always 0, RTI passes control to COLLECT
-   390                          +
-   391                          	; In critical section?
-   392                          	!if >(GC_CRIT_START) != >(GC_CRIT_END+1) {
-   393                          	  !error "High byte of GC_CRIT_START and GC_CRIT_END differs!"
-   394                          	}
-   395  c597 c0b6               	CPY #>(GC_CRIT_START)
-   396  c599 d016               	BNE +		; Not in right page, to next range test
-   397  c59b c932               	CMP #<(GC_CRIT_START)
-   398  c59d 9012               	BCC +		; Below, no stack correction
-   399  c59f c939               	CMP #<(GC_CRIT_END+1)
-   400  c5a1 b00e               	BCS +		; Above, no stack correction
-   401                          
-   402                          	; Descriptor correction: set the descriptor's high byte with the
-   403                          	; string address, the low byte has been already set.
-   404                          	; Otherwise the address in the descriptor would be incosistent!
-   405                          	; Caution: The content of $59 is starting with GC_CRIT_59 already
-   406                          	; right, but otherwise it has to be corrected by adding 1.
-   407                           
-   408  c5a3 c935               	CMP #<(GC_CRIT_59)
-   409  c5a5 b002               	BCS ++          ; $59 already incremented,
-   410  c5a7 e659               	INC $59         ; otherwise correct it!
-   411  c5a9 a455               ++	LDY $55		; Descriptor offset
-   412  c5ab c8                 	INY		; String length
-   413  c5ac c8                 	INY		; String address low (is already set!)
-   414  c5ad a559               	LDA $59		; MOVBLOCK high byte, one page to below!
-   415  c5af 914e               	STA ($4E),Y	; Just set string address high
-   416                          
-   417                          	; The previous part could theoretically use the descriptor
-   418                          	; correction code at CORR_STR, but this is normally called
-   419                          	; in IRQ context which prevents direct usage. It would be
-   420                          	; possible if RTI calls CORR_STR instead of START_COLLECT.
-   421                          	; But this would also consume 7 bytes to accomplish, saving
-   422                          	; only one byte at the expense of readability. Hence, this
-   423                          	; way is not taken.
-   424                          +
-   425                          	; call COLLECT by means of RTI:
-   426                          TO_COLLECT
-   427  c5b1 a9bf               	LDA #<(START_COLLECT)
-   428                          			; Change the return-address on stack for RTI
-   429  c5b3 9d0501             	STA $0105,X	; Low byte
-   430  c5b6 a9c5               	LDA #>(START_COLLECT)
-   431  c5b8 9d0601             	STA $0106,X	; High byte
-   432  c5bb d0ad               	BNE CONT	; IRQ continued, RTI starts the new GC
-   433                          
-   434                          SKIPSUB			; Open-Space or Search-for-Next-String routine aborted:
-   435  c5bd 68                 	PLA		; Called by RTI, remove the caller PC (for RTS)
-   436  c5be 68                 	PLA		; leading back into the GC, transfer execution directly
-   437                          			; to the new GC (COLLECT).
-   438                          START_COLLECT
-   439  c5bf a903               	LDA #3
-   440  c5c1 8553               	STA $53		; Step size to the next descriptor set to
-   441                          			; the defined start value (is not initialized
-   442                          			; by old GC!).
-   443                          }
-   444                          
-   445                          ; *** Garbage Collector
-   446                          
-   447                          COLLECT
-   448                          !ifdef debug {
-   449                          	JSR gra_on	; Enable graphic (buffer visualization)
-   450                          }
-   451                          
-   452                          	; save zero-page
-   453  c5c3 a207               	LDX #ZPLEN	; Counter and index
-   454  c5c5 b54b               SAVLOOP	LDA ZPSTART-1,X	; Index runs from count to 1
-   455  c5c7 9dd4c7             	STA SAVE-1,X	; Save area
-   456  c5ca ca                 	DEX
-   457  c5cb d0f8               	BNE SAVLOOP
-   458                          
-   459                          !ifndef no_indicator {
-   460                          			; X is zero from before!
-   461  c5cd 8622               	STX CPTR	; Pointer low byte = 0
-   462  c5cf ae8802             	LDX VIDPAGE	; Startpage of video RAM
-   463                          	!if (>MARKOFF) >= 1 {
-   464  c5d2 e8                 	INX
-   465                          	!if (>MARKOFF) >= 2 {
-   466  c5d3 e8                 	INX
-   467                          	!if (>MARKOFF) >= 3 {
-   468  c5d4 e8                 	INX
-   469                          	} } }
-   470                          	; X contains now the page plus the offset's high byte
-   471  c5d5 8623               	STX CPTR+1
-   472  c5d7 a0e7               	LDY #<(MARKOFF)
-   473  c5d9 b122               	LDA (CPTR),Y	; Activity indicator on screen:
-   474  c5db 8dd1c7             	STA ORIGVID	; Save current character
-   475  c5de a92a               	LDA #MARKCHAR
-   476  c5e0 9122               	STA (CPTR),Y	; Set mark character
-   477  c5e2 ade7db             	LDA MARKCPOS	; Same for the color information
-   478  c5e5 8dd2c7             	STA ORIGCOL	; Save current color
-   479  c5e8 a909               	LDA #MARKCOL
-   480  c5ea 8de7db             	STA MARKCPOS	; Set mark color
-   481                          }
-   482                          
-   483  c5ed a537               	LDA MEMEND	; Set string pointer
-   484  c5ef a638               	LDX MEMEND+1	; and region start
-   485  c5f1 8533               	STA STRPTR	; to memory end.
-   486  c5f3 8634               	STX STRPTR+1
-   487  c5f5 854c               	STA RNGBEG
-   488  c5f7 864d               	STX RNGBEG+1
-   489                          
-   490                          ; *** The region where the strings are searched
-   491                          
-   492                          ;                        STRADR
-   493                          ;       +-------------------------------------+
-   494                          ;       |                                     |
-   495                          ;       |                                     V
-   496                          ;   +-+-+-+      +-----------------------+----------+------+------------+
-   497                          ;   |L|PTR|      |        not yet        | searched | free |   treated  |
-   498                          ;   | |   |      |   handled strings     | strings  |      |   strings  |
-   499                          ;   +-+-+-+      +-----------------------+----------+------+------------+
-   500                          ;    ^            ^                       ^          ^      ^            ^
-   501                          ;    |            |                       |          |      |            |
-   502                          ;    STRDP        STREND                  RNGBEG     RNGEND STRPTR       MEMSIZ
-   503                          ;                                                           =FRETOP
-   504                          ;   SDS,VAR,ARY  |<-------------------- string heap -------------------->|
-   505                          ;
-   506                          ; The region RNGBEG to RNGEND (searched strings) has to be reduced by 256 bytes 
-   507                          ; from the buffer size, because a string might start on the end of the region
-   508                          ; and could exceed the region by maximal 254 bytes. This "overflow"
-   509                          ; needs to fit into the buffer and so a page is reserved for this!
-   510                          
-   511                          NEXTBLOCK
-   512  c5f9 a533               	LDA STRPTR	; NEWPTR pulled along
-   513  c5fb 854e               	STA NEWPTR	; with BUFPTR in parallel.
-   514  c5fd a534               	LDA STRPTR+1
-   515  c5ff 854f               	STA NEWPTR+1
-   516  c601 a64c               	LDX RNGBEG	; Region already at end
-   517  c603 a54d               	LDA RNGBEG+1	; of string heap?
-   518  c605 e431               	CPX STREND
-   519  c607 d004               	BNE +
-   520  c609 c532               	CMP STREND+1
-   521  c60b f01b               	BEQ EXIT	; Yes -> finished
-   522                          +
-   523  c60d 865d               	STX RNGEND	; Move by buffer length - 256
-   524  c60f 855e               	STA RNGEND+1	; down to lower addresses.
-   525                          	!if <BUFSIZE > 0 {
-   526                          	  !error "BUFSIZE is not a multiple of 256 ($100)!"
-   527                          	}
-   528  c611 38                 	SEC		
-   529  c612 e91f               	SBC #(>BUFSIZE-1)
-   530                          			; Region length in pages,
-   531                          			; could be exceeded by max. 254 bytes!
-   532  c614 9008               	BCC LASTRANGE	; < 0 = underflow (for sure <STREND)
-   533  c616 854d               	STA RNGBEG+1
-   534  c618 e431               	CPX STREND	; End of string heap reached?
-   535  c61a e532               	SBC STREND+1
-   536  c61c b02c               	BCS STRINRANGE	; Start of region >= bottom of string heap
-   537                          LASTRANGE
-   538  c61e a531               	LDA STREND	; Start of region = start of free
-   539  c620 a632               	LDX STREND+1	; Memory area (bottom of string heap)
-   540  c622 854c               	STA RNGBEG	; 
-   541  c624 864d               	STX RNGBEG+1	; 
-   542  c626 d022               	BNE STRINRANGE	; Always, because high byte >0
+   289                          	; IRQ stack frame:
+   290                          	; $104,X status register
+   291                          	; $105,X low byte PC
+   292                          	; $106,X high byte PC
+   293                          	; possibly the calling routine:
+   294                          	; $107,X low byte of the caller (return-PC)-1
+   295                          	; $108,X high byte of the caller (return-PC)-1
+   296                          
+   297  c524 bd0801             	LDA $108,X	; Caller's PC high
+   298  c527 a8                 	TAY
+   299  c528 bd0701             	LDA $107,X	; Caller's PC low
+   300                          	; callers return-PC-1 in A/Y
+   301                          			; Are we in "Open Space"?
+   302  c52b c92a               	CMP #<(CALLER_OPSP)
+   303  c52d d020               	BNE CHK_SNS
+   304  c52f c0b6               	CPY #>(CALLER_OPSP)
+   305  c531 d01c               	BNE CHK_SNS
+   306                          IN_OPSP
+   307                          	; Go back with RTI to the interrupted
+   308                          	; copy-routine to ensure that the string
+   309                          	; is completely moved. The return address
+   310                          	; used by the following RTS passes control
+   311                          	; to the correction routine (for the
+   312                          	; descriptor) to finally start with the
+   313                          	; new GC.
+   314  c533 a93e               	LDA #<(CORR_STR-1)
+   315  c535 9d0701             	STA $107,X	; RTS expects the address-1 on stack
+   316  c538 a9c5               	LDA #>(CORR_STR-1)
+   317  c53a 9d0801             	STA $108,X	; Always >0
+   318  c53d d02a               	BNE CONT	; Always go back by RTI
+   319                          
+   320                          CORR_STR
+   321  c53f a455               	LDY $55		; Descriptor offset
+   322  c541 c8                 	INY		; String length
+   323  c542 a558               	LDA $58		; Put string address low
+   324  c544 914e               	STA ($4E),Y	; into the descriptor
+   325  c546 c8                 	INY
+   326  c547 e659               	INC $59		; String address high from MOVBLOCK
+   327  c549 a559               	LDA $59		; is one page below, so correct it
+   328  c54b 914e               	STA ($4E),Y	; and put it into the descriptor
+   329  c54d d070               	BNE START_COLLECT
+   330                          			; Branch always, because always >0
+   331                          
+   332                          	
+   333                          CHK_SNS			; We are in "Search for Next String"?
+   334  c54f c0b5               	CPY #>(CALLER_SNS1)
+   335                          			; High byte is the same for all three addresses!
+   336                          	!if (  >(CALLER_SNS1) != >(CALLER_SNS2) | >(CALLER_SNS2) != >(CALLER_SNS3) | >(CALLER_SNS1) != >(CALLER_SNS3)) {
+   337                          	  !error "High-Byte of CALLER_SNS* are different. They must be all the same!"
+   338                          	}
+   339  c551 d019               	BNE CHK_PC	; Check only the low byte of these addresses ...
+   340  c553 c963               	CMP #<(CALLER_SNS1)
+   341  c555 f008               	BEQ IN_SUB
+   342  c557 c94a               	CMP #<(CALLER_SNS2)
+   343  c559 f004               	BEQ IN_SUB
+   344  c55b c9ba               	CMP #<(CALLER_SNS3)
+   345  c55d d00d               	BNE CHK_PC
+   346                          
+   347                          IN_SUB
+   348  c55f a9bd               	LDA #<(SKIPSUB) ; Redirect by changing the interruption PC
+   349                          IN_PHP
+   350  c561 9d0501             	STA $105,X	; Low byte
+   351  c564 a9c5               	LDA #>(SKIPSUB)
+   352  c566 9d0601             	STA $106,X	; High byte
+   353                          			; The following RTI branches to SKIPSUB
+   354                          			; where the caller's address is taken from stack.
+   355                          
+   356  c569 6cd3c7             CONT	JMP (ORIGIRQ)	; Pass control to the pre-hooked code (chain).
+   357                          
+   358                          CHK_PC
+   359  c56c bd0601             	LDA $106,X	; Check interruption PC
+   360  c56f a8                 	TAY		; High byte
+   361  c570 bd0501             	LDA $105,X	; Low byte
+   362  c573 c0b5               	CPY #>(GC_START)
+   363  c575 90f2               	BCC CONT	; Below GC routine
+   364  c577 d004               	BNE +		; Past GC beginning
+   365  c579 c926               	CMP #<(GC_START)
+   366  c57b 90ec               	BCC CONT	; Below GC routine
+   367  c57d c0b6               +	CPY #>(GC_END+1)
+   368  c57f 9006               	BCC ++		; In GC routine!
+   369  c581 d0e6               	BNE CONT	; Above GC routine
+   370  c583 c93d               	CMP #<(GC_END+1)
+   371  c585 b0e2               	BCS CONT	; Above GC routine
+   372                          ++
+   373                          	; The old GC routine has been interrupted!
+   374                          	; Are there any special ranges where further action is required?
+   375                          
+   376                          	; In PHP/PLP section?
+   377                          	!if >(GC_PHP_START) != >(GC_PHP_END+1) {
+   378                          	  !error "High byte of GC_PHP_START and GC_PHP_END differs!"
+   379                          	}
+   380  c587 c0b5               	CPY #>(GC_PHP_START)
+   381  c589 d00c               	BNE +		; Not in right page, to next range test
+   382  c58b c98a               	CMP #<(GC_PHP_START)
+   383  c58d 9008               	BCC +		; Below, no stack correction
+   384  c58f c999               	CMP #<(GC_PHP_END+1)
+   385  c591 b004               	BCS +		; Above, no stack correction
+   386  c593 a9be               	LDA #<(SKIPPHP) ; RTI called routine - removes one byte from stack
+   387  c595 90ca               	BCC IN_PHP	; C always 0, delays SKIPHP to past RTI
+   388                          +
+   389                          	; In critical section?
+   390                          	!if >(GC_CRIT_START) != >(GC_CRIT_END+1) {
+   391                          	  !error "High byte of GC_CRIT_START and GC_CRIT_END differs!"
+   392                          	}
+   393  c597 c0b6               	CPY #>(GC_CRIT_START)
+   394  c599 d016               	BNE +		; Not in right page, to next range test
+   395  c59b c932               	CMP #<(GC_CRIT_START)
+   396  c59d 9012               	BCC +		; Below, no stack correction
+   397  c59f c939               	CMP #<(GC_CRIT_END+1)
+   398  c5a1 b00e               	BCS +		; Above, no stack correction
+   399                          
+   400                          	; Descriptor correction: set the descriptor's high byte with the
+   401                          	; string address, the low byte has been already set.
+   402                          	; Otherwise the address in the descriptor would be incosistent!
+   403                          	; Caution: The content of $59 is starting with GC_CRIT_59 already
+   404                          	; right, but otherwise it has to be corrected by adding 1.
+   405                           
+   406  c5a3 c935               	CMP #<(GC_CRIT_59)
+   407  c5a5 b002               	BCS ++          ; $59 already incremented,
+   408  c5a7 e659               	INC $59         ; otherwise correct it!
+   409  c5a9 a455               ++	LDY $55		; Descriptor offset
+   410  c5ab c8                 	INY		; String length
+   411  c5ac c8                 	INY		; String address low (is already set!)
+   412  c5ad a559               	LDA $59		; MOVBLOCK high byte, one page to below!
+   413  c5af 914e               	STA ($4E),Y	; Just set string address high
+   414                          
+   415                          	; The previous part could theoretically use the descriptor
+   416                          	; correction code at CORR_STR, but this is normally called
+   417                          	; in IRQ context which prevents direct usage. It would be
+   418                          	; possible if RTI calls CORR_STR instead of START_COLLECT.
+   419                          	; But this would also consume 7 bytes to accomplish, saving
+   420                          	; only one byte at the expense of readability. Hence, this
+   421                          	; way is not taken.
+   422                          +
+   423                          	; call COLLECT by means of RTI:
+   424                          TO_COLLECT
+   425  c5b1 a9bf               	LDA #<(START_COLLECT)
+   426                          			; Change the return-address on stack for RTI
+   427  c5b3 9d0501             	STA $0105,X	; Low byte
+   428  c5b6 a9c5               	LDA #>(START_COLLECT)
+   429  c5b8 9d0601             	STA $0106,X	; High byte
+   430  c5bb d0ac               	BNE CONT	; IRQ continued, RTI starts the new GC
+   431                          
+   432                          SKIPSUB			; Open-Space or Search-for-Next-String routine aborted:
+   433  c5bd 68                 	PLA		; Called by RTI, remove the caller PC (for RTS)
+   434                          			; or
+   435                          SKIPPHP			; remove the PHP
+   436  c5be 68                 	PLA		; transfer execution directly to the new GC (COLLECT).
+   437                          START_COLLECT
+   438  c5bf a903               	LDA #3
+   439  c5c1 8553               	STA $53		; Step size to the next descriptor set to
+   440                          			; the defined start value (is not initialized
+   441                          			; by old GC!).
+   442                          }
+   443                          
+   444                          ; *** Garbage Collector
+   445                          
+   446                          COLLECT
+   447                          !ifdef debug {
+   448                          	JSR gra_on	; Enable graphic (buffer visualization)
+   449                          }
+   450                          
+   451                          	; save zero-page
+   452  c5c3 a207               	LDX #ZPLEN	; Counter and index
+   453  c5c5 b54b               SAVLOOP	LDA ZPSTART-1,X	; Index runs from count to 1
+   454  c5c7 9dd4c7             	STA SAVE-1,X	; Save area
+   455  c5ca ca                 	DEX
+   456  c5cb d0f8               	BNE SAVLOOP
+   457                          
+   458                          !ifndef no_indicator {
+   459                          			; X is zero from before!
+   460  c5cd 8622               	STX CPTR	; Pointer low byte = 0
+   461  c5cf ae8802             	LDX VIDPAGE	; Startpage of video RAM
+   462                          	!if (>MARKOFF) >= 1 {
+   463  c5d2 e8                 	INX
+   464                          	!if (>MARKOFF) >= 2 {
+   465  c5d3 e8                 	INX
+   466                          	!if (>MARKOFF) >= 3 {
+   467  c5d4 e8                 	INX
+   468                          	} } }
+   469                          	; X contains now the page plus the offset's high byte
+   470  c5d5 8623               	STX CPTR+1
+   471  c5d7 a0e7               	LDY #<(MARKOFF)
+   472  c5d9 b122               	LDA (CPTR),Y	; Activity indicator on screen:
+   473  c5db 8dd1c7             	STA ORIGVID	; Save current character
+   474  c5de a92a               	LDA #MARKCHAR
+   475  c5e0 9122               	STA (CPTR),Y	; Set mark character
+   476  c5e2 ade7db             	LDA MARKCPOS	; Same for the color information
+   477  c5e5 8dd2c7             	STA ORIGCOL	; Save current color
+   478  c5e8 a909               	LDA #MARKCOL
+   479  c5ea 8de7db             	STA MARKCPOS	; Set mark color
+   480                          }
+   481                          
+   482  c5ed a537               	LDA MEMEND	; Set string pointer
+   483  c5ef a638               	LDX MEMEND+1	; and region start
+   484  c5f1 8533               	STA STRPTR	; to memory end.
+   485  c5f3 8634               	STX STRPTR+1
+   486  c5f5 854c               	STA RNGBEG
+   487  c5f7 864d               	STX RNGBEG+1
+   488                          
+   489                          ; *** The region where the strings are searched
+   490                          
+   491                          ;                        STRADR
+   492                          ;       +-------------------------------------+
+   493                          ;       |                                     |
+   494                          ;       |                                     V
+   495                          ;   +-+-+-+      +-----------------------+----------+------+------------+
+   496                          ;   |L|PTR|      |        not yet        | searched | free |   treated  |
+   497                          ;   | |   |      |   handled strings     | strings  |      |   strings  |
+   498                          ;   +-+-+-+      +-----------------------+----------+------+------------+
+   499                          ;    ^            ^                       ^          ^      ^            ^
+   500                          ;    |            |                       |          |      |            |
+   501                          ;    STRDP        STREND                  RNGBEG     RNGEND STRPTR       MEMSIZ
+   502                          ;                                                           =FRETOP
+   503                          ;   SDS,VAR,ARY  |<-------------------- string heap -------------------->|
+   504                          ;
+   505                          ; The region RNGBEG to RNGEND (searched strings) has to be reduced by 256 bytes 
+   506                          ; from the buffer size, because a string might start on the end of the region
+   507                          ; and could exceed the region by maximal 254 bytes. This "overflow"
+   508                          ; needs to fit into the buffer and so a page is reserved for this!
+   509                          
+   510                          NEXTBLOCK
+   511  c5f9 a533               	LDA STRPTR	; NEWPTR pulled along
+   512  c5fb 854e               	STA NEWPTR	; with BUFPTR in parallel.
+   513  c5fd a534               	LDA STRPTR+1
+   514  c5ff 854f               	STA NEWPTR+1
+   515  c601 a64c               	LDX RNGBEG	; Region already at end
+   516  c603 a54d               	LDA RNGBEG+1	; of string heap?
+   517  c605 e431               	CPX STREND
+   518  c607 d004               	BNE +
+   519  c609 c532               	CMP STREND+1
+   520  c60b f01b               	BEQ EXIT	; Yes -> finished
+   521                          +
+   522  c60d 865d               	STX RNGEND	; Move by buffer length - 256
+   523  c60f 855e               	STA RNGEND+1	; down to lower addresses.
+   524                          	!if <BUFSIZE > 0 {
+   525                          	  !error "BUFSIZE is not a multiple of 256 ($100)!"
+   526                          	}
+   527  c611 38                 	SEC		
+   528  c612 e91f               	SBC #(>BUFSIZE-1)
+   529                          			; Region length in pages,
+   530                          			; could be exceeded by max. 254 bytes!
+   531  c614 9008               	BCC LASTRANGE	; < 0 = underflow (for sure <STREND)
+   532  c616 854d               	STA RNGBEG+1
+   533  c618 e431               	CPX STREND	; End of string heap reached?
+   534  c61a e532               	SBC STREND+1
+   535  c61c b02c               	BCS STRINRANGE	; Start of region >= bottom of string heap
+   536                          LASTRANGE
+   537  c61e a531               	LDA STREND	; Start of region = start of free
+   538  c620 a632               	LDX STREND+1	; Memory area (bottom of string heap)
+   539  c622 854c               	STA RNGBEG	; 
+   540  c624 864d               	STX RNGBEG+1	; 
+   541  c626 d022               	BNE STRINRANGE	; Always, because high byte >0
+   542                          
    543                          
-   544                          
-   545                          ; *** Garbage collection finished
-   546                          
-   547                          EXIT
-   548                          	; Zero-page registers
-   549  c628 a207               	LDX #ZPLEN	; Count and index
-   550  c62a bdd4c7             RESLOOP	LDA SAVE-1,X	; Index runs from count to 1
-   551  c62d 954b               	STA ZPSTART-1,X	; Restore from save area
-   552  c62f ca                 	DEX
-   553  c630 d0f8               	BNE RESLOOP
-   554                          
-   555                          !ifndef no_indicator {
-   556                          			; X is zero from before!
-   557  c632 8622               	STX CPTR	; Pointer low byte = 0
-   558  c634 ae8802             	LDX VIDPAGE	; Startpage of video RAM
-   559                          	!if (>MARKOFF) >= 1 {
-   560  c637 e8                 	INX
-   561                          	!if (>MARKOFF) >= 2 {
-   562  c638 e8                 	INX
-   563                          	!if (>MARKOFF) >= 3 {
-   564  c639 e8                 	INX
-   565                          	} } }
-   566                          	; X contains now the page plus the offset's high byte
-   567  c63a 8623               	STX CPTR+1
-   568  c63c a0e7               	LDY #<(MARKOFF)
-   569  c63e add1c7             	LDA ORIGVID	; Clear activation indicator:
-   570  c641 9122               	STA (CPTR),Y	; restore character on screen
-   571  c643 add2c7             	LDA ORIGCOL	; and its color.
-   572  c646 8de7db             	STA MARKCPOS
-   573                          }
-   574                          !ifdef debug {
-   575                          	JSR gra_off
-   576                          }
-   577  c649 60                 	RTS
+   544                          ; *** Garbage collection finished
+   545                          
+   546                          EXIT
+   547                          	; Zero-page registers
+   548  c628 a207               	LDX #ZPLEN	; Count and index
+   549  c62a bdd4c7             RESLOOP	LDA SAVE-1,X	; Index runs from count to 1
+   550  c62d 954b               	STA ZPSTART-1,X	; Restore from save area
+   551  c62f ca                 	DEX
+   552  c630 d0f8               	BNE RESLOOP
+   553                          
+   554                          !ifndef no_indicator {
+   555                          			; X is zero from before!
+   556  c632 8622               	STX CPTR	; Pointer low byte = 0
+   557  c634 ae8802             	LDX VIDPAGE	; Startpage of video RAM
+   558                          	!if (>MARKOFF) >= 1 {
+   559  c637 e8                 	INX
+   560                          	!if (>MARKOFF) >= 2 {
+   561  c638 e8                 	INX
+   562                          	!if (>MARKOFF) >= 3 {
+   563  c639 e8                 	INX
+   564                          	} } }
+   565                          	; X contains now the page plus the offset's high byte
+   566  c63a 8623               	STX CPTR+1
+   567  c63c a0e7               	LDY #<(MARKOFF)
+   568  c63e add1c7             	LDA ORIGVID	; Clear activation indicator:
+   569  c641 9122               	STA (CPTR),Y	; restore character on screen
+   570  c643 add2c7             	LDA ORIGCOL	; and its color.
+   571  c646 8de7db             	STA MARKCPOS
+   572                          }
+   573                          !ifdef debug {
+   574                          	JSR gra_off
+   575                          }
+   576  c649 60                 	RTS
+   577                          
    578                          
-   579                          
-   580                          ; *** Find all strings within the region
-   581                          
-   582                          STRINRANGE
-   583                          !if ((BUF+BUFSIZE) and $FFFF) != 0  {
-   584                          	LDA #>(BUF+BUFSIZE)
-   585                          	STA BUFPTR+1
-   586                          	LDA #<(BUF+BUFSIZE)
-   587                          	STA BUFPTR
-   588                          } else {
-   589                          			; Special case: buffer end $FFFF
-   590  c64a a900               	LDA #0		; Set buffer pointer start value 
-   591  c64c 855f               	STA BUFPTR	; to $10000 (65536) = 0
-   592  c64e 8560               	STA BUFPTR+1
-   593                          }
-   594  c650 38                 	SEC		; Initialize search
-   595  c651 24                 	!byte $24	; BIT ZP, skip next instruction
-   596                          NEXTSTR	
-   597  c652 18                 	CLC		; Continue search
-   598                          NEXTSTR1
-   599  c653 20bdc6             	JSR GETSA	; Fetch next string address
-   600  c656 f03b               	BEQ COPYBACK	; No String found anymore
-   601                          			; Address in X/Y
-   602                          
-   603  c658 98                 	TYA		; High byte
-   604  c659 e45d               	CPX RNGEND	; X/A >= RNGEND:
-   605  c65b e55e               	SBC RNGEND+1	; Above region, try
-   606  c65d b0f3               	BCS NEXTSTR	; next string!
-   607                          
-   608  c65f 98                 	TYA		; High Byte
-   609  c660 e44c               	CPX RNGBEG	; X/A < RNGBEG:
-   610  c662 e54d               	SBC RNGBEG+1	; Below the region, so
-   611  c664 90ed               	BCC NEXTSTR1	; next string!
-   612                          			; Within the region:
-   613  c666 a55f               	LDA BUFPTR	; Carry flag always set
-   614  c668 e552               	SBC LEN		; Buffer pointer moved
-   615  c66a 855f               	STA BUFPTR	; down by string length.
-   616  c66c b002               	BCS +		; Check high byte overflow
-   617  c66e c660               	DEC BUFPTR+1
-   618                          
-   619  c670 8459               +	STY STRADR+1	; Save as string address
-   620  c672 8658               	STX STRADR	; for copy action.
-   621                          
-   622  c674 a452               	LDY LEN		; String length (always > 0)
-   623  c676 d004               	BNE NBENTRY	; Always start with decrement
-   624  c678 b158               NEXTBYT	LDA (STRADR),Y	; Copy string to buffer,
-   625  c67a 915f               	STA (BUFPTR),Y	; write through to RAM below ROM.
-   626  c67c 88                 NBENTRY	DEY		; Index and counter
-   627  c67d d0f9               	BNE NEXTBYT
-   628  c67f b158               	LDA (STRADR),Y	; Also the 0th byte,
-   629  c681 915f               	STA (BUFPTR),Y	; extra handled
-   630                          
-   631  c683 38                 	SEC		; New string address:
-   632  c684 a54e               	LDA NEWPTR	; Simply pull along
-   633  c686 e552               	SBC LEN		; the pointer, by
-   634  c688 854e               	STA NEWPTR	; subtract the length.
-   635  c68a b002               	BCS +		; 
-   636  c68c c64f               	DEC NEWPTR+1	; High byte overflow
-   637                          +
-   638  c68e 208cc7             	JSR CORR	; Fix the string address in the
-   639                          			; descriptor, Z=0 on leave.
-   640  c691 d0bf               	BNE NEXTSTR	; Always, continue with next string
+   579                          ; *** Find all strings within the region
+   580                          
+   581                          STRINRANGE
+   582                          !if ((BUF+BUFSIZE) and $FFFF) != 0  {
+   583                          	LDA #>(BUF+BUFSIZE)
+   584                          	STA BUFPTR+1
+   585                          	LDA #<(BUF+BUFSIZE)
+   586                          	STA BUFPTR
+   587                          } else {
+   588                          			; Special case: buffer end $FFFF
+   589  c64a a900               	LDA #0		; Set buffer pointer start value 
+   590  c64c 855f               	STA BUFPTR	; to $10000 (65536) = 0
+   591  c64e 8560               	STA BUFPTR+1
+   592                          }
+   593  c650 38                 	SEC		; Initialize search
+   594  c651 24                 	!byte $24	; BIT ZP, skip next instruction
+   595                          NEXTSTR	
+   596  c652 18                 	CLC		; Continue search
+   597                          NEXTSTR1
+   598  c653 20bdc6             	JSR GETSA	; Fetch next string address
+   599  c656 f03b               	BEQ COPYBACK	; No String found anymore
+   600                          			; Address in X/Y
+   601                          
+   602  c658 98                 	TYA		; High byte
+   603  c659 e45d               	CPX RNGEND	; X/A >= RNGEND:
+   604  c65b e55e               	SBC RNGEND+1	; Above region, try
+   605  c65d b0f3               	BCS NEXTSTR	; next string!
+   606                          
+   607  c65f 98                 	TYA		; High Byte
+   608  c660 e44c               	CPX RNGBEG	; X/A < RNGBEG:
+   609  c662 e54d               	SBC RNGBEG+1	; Below the region, so
+   610  c664 90ed               	BCC NEXTSTR1	; next string!
+   611                          			; Within the region:
+   612  c666 a55f               	LDA BUFPTR	; Carry flag always set
+   613  c668 e552               	SBC LEN		; Buffer pointer moved
+   614  c66a 855f               	STA BUFPTR	; down by string length.
+   615  c66c b002               	BCS +		; Check high byte overflow
+   616  c66e c660               	DEC BUFPTR+1
+   617                          
+   618  c670 8459               +	STY STRADR+1	; Save as string address
+   619  c672 8658               	STX STRADR	; for copy action.
+   620                          
+   621  c674 a452               	LDY LEN		; String length (always > 0)
+   622  c676 d004               	BNE NBENTRY	; Always start with decrement
+   623  c678 b158               NEXTBYT	LDA (STRADR),Y	; Copy string to buffer,
+   624  c67a 915f               	STA (BUFPTR),Y	; write through to RAM below ROM.
+   625  c67c 88                 NBENTRY	DEY		; Index and counter
+   626  c67d d0f9               	BNE NEXTBYT
+   627  c67f b158               	LDA (STRADR),Y	; Also the 0th byte,
+   628  c681 915f               	STA (BUFPTR),Y	; extra handled
+   629                          
+   630  c683 38                 	SEC		; New string address:
+   631  c684 a54e               	LDA NEWPTR	; Simply pull along
+   632  c686 e552               	SBC LEN		; the pointer, by
+   633  c688 854e               	STA NEWPTR	; subtract the length.
+   634  c68a b002               	BCS +		; 
+   635  c68c c64f               	DEC NEWPTR+1	; High byte overflow
+   636                          +
+   637  c68e 208cc7             	JSR CORR	; Fix the string address in the
+   638                          			; descriptor, Z=0 on leave.
+   639  c691 d0bf               	BNE NEXTSTR	; Always, continue with next string
+   640                          
    641                          
-   642                          
-   643                          ; *** Transfer buffer back to the string heap
-   644                          
-   645                          ; 0 ------------------------------------------- FFFF	
-   646                          ;      destination                  source
-   647                          ;          +--------------------------+
-   648                          ;          |                          |
-   649                          ;          V                         /^\
-   650                          ;     |||||||||||                |||||||||||
-   651                          ;     ^          ^               ^          ^ 
-   652                          ;     NEWPTR     STRPTR          BUFPTR     (BUF+BUFSIZE)
-   653                          
-   654                          COPYBACK
-   655                          !if ((BUF+BUFSIZE) and $FFFF) != 0  {
-   656                          	LDA BUFPTR	; Buffer is empty ...
-   657                          	CMP #<(BUF+BUFSIZE)
-   658                          	BNE +
-   659                          	LDA BUFPTR+1	; if pointer is still on end
-   660                          	CMP #>(BUF+BUFSIZE)
-   661                          	BEQ NOCOPY	; Skip copy if buffer is empty,
-   662                          +			; to NEXTBLOCK, far branch needed.
-   663                          } else {
-   664                          			; Special case: buffer end at $FFFF
-   665  c693 a55f               	LDA BUFPTR	; Buffer empty
-   666  c695 0560               	ORA BUFPTR+1	; if pointer is 0 (at end).
-   667  c697 f021               	BEQ NOCOPY	; Skip copy if buffer is empty,
-   668                          			; to NEXTBLOCK, far branch needed.
-   669                          }
-   670                          
-   671                          !ifdef orig_movblock {
-   672                          	LDA STRPTR	; Original MOVBLOCK needs
-   673                          	LDX STRPTR+1	; destination block end +1
-   674                          } else {
-   675  c699 a54e               	LDA NEWPTR	; Optimized MOVBLOCK needs
-   676  c69b a64f               	LDX NEWPTR+1	; destination block start
-   677                          }
-   678  c69d 8558               	STA $58		; = STRADR,
-   679  c69f 8659               	STX $59		; Depending on MOVBLOCK variant
-   680                          			; end+1 or begin of destination block.
-   681                          
-   682                          !ifdef orig_movblock {
-   683                          	LDA NEWPTR	; For original MOVBLOCK only,
-   684                          	LDX NEWPTR+1	; otherwise already in A/X.
-   685                          }
-   686  c6a1 8533               	STA STRPTR	; New FRETOP so far
-   687  c6a3 8634               	STX STRPTR+1
-   688                          
-   689                          !if ((BUF+BUFSIZE) and $FFFF) != 0  {
-   690                          	LDA #<(BUF+BUFSIZE)
-   691                          	STA $5A		; Source block end+1
-   692                          	LDA #>(BUF+BUFSIZE)
-   693                          	STA $5B
-   694                          } else {
-   695                          			; Special case buffer end at $FFFF
-   696  c6a5 a900               	LDA #$00	; Source block end+1
-   697  c6a7 855a               	STA $5A
-   698  c6a9 855b               	STA $5B
-   699                          }
-   700                          			; Source block begin = BUFPTR
-   701                          
-   702  c6ab 78                 	SEI		; Don't allow interrupts while
-   703  c6ac a501               	LDA PROCPORT	; KERNAL ROM is switched off
-   704                          			; to gain access to the RAM under ROM.
-   705  c6ae 48                 	PHA		; Save previous memory configuration
-   706  c6af a935               	LDA #MEMRAM	; With KERNAL also BASIC ROM is off!
-   707                          			; Both buffer $F000 as well as $A000
-   708                          			; will have both ROMs switched off.
-   709  c6b1 8501               	STA PROCPORT
-   710                          
-   711  c6b3 209bc7             	JSR MOVBLOCK	; BASIC's routine to move a block,
-   712                          			; with IRQ hook a own routine must be used
-   713                          			; because the BASIC ROM isn't switched in!
-   714                          			; Otherwise we have the ROM copy in RAM
-   715                          			; Z=1
-   716  c6b6 68                 	PLA		; Restore previous memory configuration
-   717  c6b7 8501               	STA PROCPORT	; KERNAL ROM should be active again
-   718  c6b9 58                 	CLI
-   719                          NOCOPY
-   720  c6ba 4cf9c5             	JMP NEXTBLOCK	; next region
+   642                          ; *** Transfer buffer back to the string heap
+   643                          
+   644                          ; 0 ------------------------------------------- FFFF	
+   645                          ;      destination                  source
+   646                          ;          +--------------------------+
+   647                          ;          |                          |
+   648                          ;          V                         /^\
+   649                          ;     |||||||||||                |||||||||||
+   650                          ;     ^          ^               ^          ^ 
+   651                          ;     NEWPTR     STRPTR          BUFPTR     (BUF+BUFSIZE)
+   652                          
+   653                          COPYBACK
+   654                          !if ((BUF+BUFSIZE) and $FFFF) != 0  {
+   655                          	LDA BUFPTR	; Buffer is empty ...
+   656                          	CMP #<(BUF+BUFSIZE)
+   657                          	BNE +
+   658                          	LDA BUFPTR+1	; if pointer is still on end
+   659                          	CMP #>(BUF+BUFSIZE)
+   660                          	BEQ NOCOPY	; Skip copy if buffer is empty,
+   661                          +			; to NEXTBLOCK, far branch needed.
+   662                          } else {
+   663                          			; Special case: buffer end at $FFFF
+   664  c693 a55f               	LDA BUFPTR	; Buffer empty
+   665  c695 0560               	ORA BUFPTR+1	; if pointer is 0 (at end).
+   666  c697 f021               	BEQ NOCOPY	; Skip copy if buffer is empty,
+   667                          			; to NEXTBLOCK, far branch needed.
+   668                          }
+   669                          
+   670                          !ifdef orig_movblock {
+   671                          	LDA STRPTR	; Original MOVBLOCK needs
+   672                          	LDX STRPTR+1	; destination block end +1
+   673                          } else {
+   674  c699 a54e               	LDA NEWPTR	; Optimized MOVBLOCK needs
+   675  c69b a64f               	LDX NEWPTR+1	; destination block start
+   676                          }
+   677  c69d 8558               	STA $58		; = STRADR,
+   678  c69f 8659               	STX $59		; Depending on MOVBLOCK variant
+   679                          			; end+1 or begin of destination block.
+   680                          
+   681                          !ifdef orig_movblock {
+   682                          	LDA NEWPTR	; For original MOVBLOCK only,
+   683                          	LDX NEWPTR+1	; otherwise already in A/X.
+   684                          }
+   685  c6a1 8533               	STA STRPTR	; New FRETOP so far
+   686  c6a3 8634               	STX STRPTR+1
+   687                          
+   688                          !if ((BUF+BUFSIZE) and $FFFF) != 0  {
+   689                          	LDA #<(BUF+BUFSIZE)
+   690                          	STA $5A		; Source block end+1
+   691                          	LDA #>(BUF+BUFSIZE)
+   692                          	STA $5B
+   693                          } else {
+   694                          			; Special case buffer end at $FFFF
+   695  c6a5 a900               	LDA #$00	; Source block end+1
+   696  c6a7 855a               	STA $5A
+   697  c6a9 855b               	STA $5B
+   698                          }
+   699                          			; Source block begin = BUFPTR
+   700                          
+   701  c6ab 78                 	SEI		; Don't allow interrupts while
+   702  c6ac a501               	LDA PROCPORT	; KERNAL ROM is switched off
+   703                          			; to gain access to the RAM under ROM.
+   704  c6ae 48                 	PHA		; Save previous memory configuration
+   705  c6af a935               	LDA #MEMRAM	; With KERNAL also BASIC ROM is off!
+   706                          			; Both buffer $F000 as well as $A000
+   707                          			; will have both ROMs switched off.
+   708  c6b1 8501               	STA PROCPORT
+   709                          
+   710  c6b3 209bc7             	JSR MOVBLOCK	; BASIC's routine to move a block,
+   711                          			; with IRQ hook a own routine must be used
+   712                          			; because the BASIC ROM isn't switched in!
+   713                          			; Otherwise we have the ROM copy in RAM
+   714                          			; Z=1
+   715  c6b6 68                 	PLA		; Restore previous memory configuration
+   716  c6b7 8501               	STA PROCPORT	; KERNAL ROM should be active again
+   717  c6b9 58                 	CLI
+   718                          NOCOPY
+   719  c6ba 4cf9c5             	JMP NEXTBLOCK	; next region
+   720                          
    721                          
-   722                          
-   723                          ;
-   724                          ; *** Get String - fetch next string with length > 0
-   725                          ;
-   726                          ; ( C-flag, STAT, STRDP -> STRDP, LEN, STAT, X, Y, Z-flag )
-   727                          ;
-   728                          ; If C=1 start from the beginning at SDS, otherwise
-   729                          ; continue with position STRDP and string status STAT.
-   730                          ; If the Z-Flag is set no string is available,
-   731                          ; otherwise X/Y contains the address and LEN
-   732                          ; the length of the string.
-   733                          
-   734  c6bd 905a               GETSA	BCC CHECKTYPE	; C=0 -> continue with string according to STAT
-   735                          			; otherwise start with at SDS ...
-   736                          
-   737                          ; *** Look up String Descriptor Stack (SDS): TOSS to TSSP
-   738                          ;
-   739                          ;    +-------------+
-   740                          ;    |             V
-   741                          ;    |    belegt->|<-frei
-   742                          ;   +-+     +-----+-----+-----+
-   743                          ;   | |     |S|L|H|S|L|H|S|L|H|
-   744                          ;   +-+     +-----+-----+-----+
-   745                          ;    ^       ^     ^     ^     ^
-   746                          ;    $16     $19   $1C   $1F   $22
-   747                          ;    TSSP    TOSS
-   748                          
-   749                          DESCSTACK
-   750  c6bf a000               	LDY #0
-   751  c6c1 8423               	STY STRDP+1	; Zero descriptor pointer high
-   752  c6c3 a905               	LDA #STAT_SDS	; Set status to SDS
-   753  c6c5 8557               	STA STAT
-   754  c6c7 a219               	LDX #TOSS	; Start of SDS
-   755  c6c9 d005               	BNE ISDSTEND	; branch always
-   756  c6cb a622               DSTACK	LDX STRDP
-   757  c6cd e8                 NEXTDST	INX		; next descriptor
-   758  c6ce e8                 	INX
-   759  c6cf e8                 	INX
-   760                          ISDSTEND
-   761  c6d0 e416               	CPX TSSP	; SDS finished?
-   762  c6d2 f010               	BEQ VARS
-   763  c6d4 b500               	LDA 0,X		; Check string length
-   764  c6d6 f0f5               	BEQ NEXTDST
-   765  c6d8 8552               	STA LEN		; Return variables:
-   766  c6da 8622               	STX STRDP	; length, descriptor address
-   767  c6dc b502               	LDA 2,X		; String address high
-   768  c6de a8                 	TAY
-   769  c6df b501               	LDA 1,X		; String address low
-   770  c6e1 aa                 	TAX
-   771  c6e2 98                 	TYA		; Always not zero, Z=0
-   772  c6e3 60                 	RTS		; Returns address in X/Y
-   773                          
-   774                          ; *** Look up simple variables: VARTAB to ARYTAB
-   775                          
-   776  c6e4 a52d               VARS	LDA VARTAB	; Begin of variables
-   777  c6e6 a62e               	LDX VARTAB+1
-   778  c6e8 8522               	STA STRDP
-   779  c6ea 8623               	STX STRDP+1
-   780  c6ec a003               	LDY #STAT_VAR	; Set status to variables
-   781  c6ee 8457               	STY STAT
-   782  c6f0 d00b               	BNE ISVAREND	; Branch always
-   783                          VAR
-   784  c6f2 18                 NEXTVAR	CLC		; Next variable
-   785  c6f3 a522               	LDA STRDP
-   786  c6f5 6907               	ADC #7		; Advance to next variable
-   787  c6f7 8522               	STA STRDP
-   788  c6f9 9002               	BCC ISVAREND
-   789  c6fb e623               	INC STRDP+1	; Overflow high byte
-   790                          ISVAREND
-   791  c6fd c52f               	CMP ARYTAB
-   792  c6ff d006               	BNE CHECKVAR
-   793  c701 a623               	LDX STRDP+1	; Variable end (=array start)?
-   794  c703 e430               	CPX ARYTAB+1
-   795  c705 f01d               	BEQ ARRAYS	; Variable end reached, proceed with arrays
-   796                          CHECKVAR
-   797  c707 a000               	LDY #0		; Variable name
-   798  c709 b122               	LDA (STRDP),Y	; 1st character, type in bit 7 
-   799  c70b 30e5               	BMI NEXTVAR	; No string, to next variable
-   800  c70d c8                 	INY
-   801  c70e b122               	LDA (STRDP),Y	; 2nd character, type in bit 7
-   802  c710 10e0               	BPL NEXTVAR	; No string, to next variable
-   803  c712 c8                 	INY
-   804  c713 b122               	LDA (STRDP),Y	; String length
-   805  c715 f0db               	BEQ NEXTVAR	; = 0, to next variable
-   806  c717 d063               	BNE RETGETSA
-   807                          
-   808                          CHECKTYPE
-   809  c719 a557               	LDA STAT	; GETSA intro with C=0
-   810  c71b c903               	CMP #STAT_VAR	; String status?
-   811  c71d 9042               	BCC ARRAY	; =1 -> arrays
-   812  c71f f0d1               	BEQ VAR		; =3 -> variables
-   813  c721 4ccbc6             	JMP DSTACK	; =5 -> SDS
-   814                          
-   815                          ; *** Look up arrays: ARYTAB to STREND
-   816                          
-   817  c724 8550               ARRAYS	STA PTR		; A/X set from simple variable processing,
-   818  c726 8651               	STX PTR+1	; pointing the start of arrays.
-   819  c728 a001               	LDY #STAT_ARY
-   820  c72a 8457               	STY STAT	; Set status to arrays
-   821                          ISARREND
-   822  c72c a550               	LDA PTR
-   823  c72e a651               	LDX PTR+1
-   824  c730 e432               CHKAEND	CPX STREND+1	; End of array area?
-   825  c732 d004                       BNE NEXTARR
-   826  c734 c531               	CMP STREND	; High byte matches, low byte is
-   827                          			; less or equal.
-   828  c736 f04f               	BEQ NOSTRING	; Arrays finished -> no string
-   829                          NEXTARR
-   830                          			; Carry always cleared because of CPX/CMP
-   831  c738 8522               	STA STRDP	; Start of an array
-   832  c73a 8623               	STX STRDP+1
-   833  c73c a000               	LDY #0
-   834  c73e b122               	LDA (STRDP),Y	; Array name
-   835  c740 aa                 	TAX		; Array type, keep it for later
-   836  c741 c8                 	INY
-   837  c742 b122               	LDA (STRDP),Y
-   838  c744 08                 	PHP		; Array type 2nd part, keep also
-   839  c745 c8                 	INY
-   840  c746 b122               	LDA (STRDP),Y	; Offset to next array
-   841  c748 6550               	ADC PTR		; C-flag is cleared (because of CMP/CPX above)
-   842  c74a 8550               	STA PTR		; Save start of following array
-   843  c74c c8                 	INY
-   844  c74d b122               	LDA (STRDP),Y
-   845  c74f 6551               	ADC PTR+1
-   846  c751 8551               	STA PTR+1
-   847  c753 28                 	PLP		; Fetch array type
-   848  c754 10d6               	BPL ISARREND	; Not a string array
-   849  c756 8a                 	TXA		; Fetch array type 2nd part
-   850  c757 30d3               	BMI ISARREND	; Not string array
-   851  c759 c8                 	INY
-   852  c75a b122               	LDA (STRDP),Y	; Number of dimensions
-   853  c75c 0a                 	ASL		; *2
-   854  c75d 6905               	ADC #5		; Offset = dimensions*2+5
-   855                          			; C=0 as long as dim.. <= 125
-   856  c75f d003               	BNE ADVDESC	; Branch always
-   857                          ARRAY			; Entry on continuation
-   858                          NEXTASTR
-   859  c761 18                 	CLC
-   860  c762 a903               	LDA #3		; String descriptor length
-   861  c764 6522               ADVDESC	ADC STRDP	; Advance to next string
-   862  c766 8522               	STA STRDP
-   863  c768 9002               	BCC +
-   864  c76a e623               	INC STRDP+1	; Overflow high byte
-   865  c76c c550               +	CMP PTR		; All array elements processed?
-   866  c76e d006               	BNE IS0ASTR
-   867  c770 a623               	LDX STRDP+1
-   868  c772 e451               	CPX PTR+1
-   869  c774 f0ba               	BEQ CHKAEND	; A/X = PTR, check for end of  array area
-   870                          IS0ASTR
-   871  c776 a000               	LDY #0
-   872  c778 b122               	LDA (STRDP),Y	; String length
-   873  c77a f0e5               	BEQ NEXTASTR	; Next array element
-   874                          RETGETSA
-   875  c77c 8552               	STA LEN		; Return value: length
-   876  c77e c8                 	INY
-   877  c77f b122               	LDA (STRDP),Y	; String address low
-   878  c781 aa                 	TAX
-   879  c782 c8                 	INY
-   880  c783 b122               	LDA (STRDP),Y	; String address high
-   881  c785 a8                 	TAY		; Always not zero, Z=0
-   882  c786 60                 	RTS		; Return address in X/Y
-   883                          NOSTRING
-   884  c787 a900               	LDA #0		; Length 0 
-   885  c789 8552               	STA LEN		; No string found
-   886  c78b 60                 	RTS		; Z=1
-   887                          
-   888                          ;
-   889                          ; *** Correct string Address in descriptor
-   890                          ;
-   891                          ; ( NEWPTR, STRDP, STAT -> )
-   892                          ;
-   893  c78c a557               CORR	LDA STAT	; String status
-   894  c78e 2903               	AND #%011	; Just 2 bits, giving the
-   895  c790 a8                 	TAY		; offset to the descriptor ...
-   896  c791 a54e               	LDA NEWPTR	;
-   897  c793 9122               	STA (STRDP),Y	; which differs for SDS
-   898  c795 c8                 	INY		; and array elements!
-   899  c796 a54f               	LDA NEWPTR+1
-   900  c798 9122               	STA (STRDP),Y
-   901  c79a 60                 	RTS
+   722                          ;
+   723                          ; *** Get String - fetch next string with length > 0
+   724                          ;
+   725                          ; ( C-flag, STAT, STRDP -> STRDP, LEN, STAT, X, Y, Z-flag )
+   726                          ;
+   727                          ; If C=1 start from the beginning at SDS, otherwise
+   728                          ; continue with position STRDP and string status STAT.
+   729                          ; If the Z-Flag is set no string is available,
+   730                          ; otherwise X/Y contains the address and LEN
+   731                          ; the length of the string.
+   732                          
+   733  c6bd 905a               GETSA	BCC CHECKTYPE	; C=0 -> continue with string according to STAT
+   734                          			; otherwise start with at SDS ...
+   735                          
+   736                          ; *** Look up String Descriptor Stack (SDS): TOSS to TSSP
+   737                          ;
+   738                          ;    +-------------+
+   739                          ;    |             V
+   740                          ;    |    belegt->|<-frei
+   741                          ;   +-+     +-----+-----+-----+
+   742                          ;   | |     |S|L|H|S|L|H|S|L|H|
+   743                          ;   +-+     +-----+-----+-----+
+   744                          ;    ^       ^     ^     ^     ^
+   745                          ;    $16     $19   $1C   $1F   $22
+   746                          ;    TSSP    TOSS
+   747                          
+   748                          DESCSTACK
+   749  c6bf a000               	LDY #0
+   750  c6c1 8423               	STY STRDP+1	; Zero descriptor pointer high
+   751  c6c3 a905               	LDA #STAT_SDS	; Set status to SDS
+   752  c6c5 8557               	STA STAT
+   753  c6c7 a219               	LDX #TOSS	; Start of SDS
+   754  c6c9 d005               	BNE ISDSTEND	; branch always
+   755  c6cb a622               DSTACK	LDX STRDP
+   756  c6cd e8                 NEXTDST	INX		; next descriptor
+   757  c6ce e8                 	INX
+   758  c6cf e8                 	INX
+   759                          ISDSTEND
+   760  c6d0 e416               	CPX TSSP	; SDS finished?
+   761  c6d2 f010               	BEQ VARS
+   762  c6d4 b500               	LDA 0,X		; Check string length
+   763  c6d6 f0f5               	BEQ NEXTDST
+   764  c6d8 8552               	STA LEN		; Return variables:
+   765  c6da 8622               	STX STRDP	; length, descriptor address
+   766  c6dc b502               	LDA 2,X		; String address high
+   767  c6de a8                 	TAY
+   768  c6df b501               	LDA 1,X		; String address low
+   769  c6e1 aa                 	TAX
+   770  c6e2 98                 	TYA		; Always not zero, Z=0
+   771  c6e3 60                 	RTS		; Returns address in X/Y
+   772                          
+   773                          ; *** Look up simple variables: VARTAB to ARYTAB
+   774                          
+   775  c6e4 a52d               VARS	LDA VARTAB	; Begin of variables
+   776  c6e6 a62e               	LDX VARTAB+1
+   777  c6e8 8522               	STA STRDP
+   778  c6ea 8623               	STX STRDP+1
+   779  c6ec a003               	LDY #STAT_VAR	; Set status to variables
+   780  c6ee 8457               	STY STAT
+   781  c6f0 d00b               	BNE ISVAREND	; Branch always
+   782                          VAR
+   783  c6f2 18                 NEXTVAR	CLC		; Next variable
+   784  c6f3 a522               	LDA STRDP
+   785  c6f5 6907               	ADC #7		; Advance to next variable
+   786  c6f7 8522               	STA STRDP
+   787  c6f9 9002               	BCC ISVAREND
+   788  c6fb e623               	INC STRDP+1	; Overflow high byte
+   789                          ISVAREND
+   790  c6fd c52f               	CMP ARYTAB
+   791  c6ff d006               	BNE CHECKVAR
+   792  c701 a623               	LDX STRDP+1	; Variable end (=array start)?
+   793  c703 e430               	CPX ARYTAB+1
+   794  c705 f01d               	BEQ ARRAYS	; Variable end reached, proceed with arrays
+   795                          CHECKVAR
+   796  c707 a000               	LDY #0		; Variable name
+   797  c709 b122               	LDA (STRDP),Y	; 1st character, type in bit 7 
+   798  c70b 30e5               	BMI NEXTVAR	; No string, to next variable
+   799  c70d c8                 	INY
+   800  c70e b122               	LDA (STRDP),Y	; 2nd character, type in bit 7
+   801  c710 10e0               	BPL NEXTVAR	; No string, to next variable
+   802  c712 c8                 	INY
+   803  c713 b122               	LDA (STRDP),Y	; String length
+   804  c715 f0db               	BEQ NEXTVAR	; = 0, to next variable
+   805  c717 d063               	BNE RETGETSA
+   806                          
+   807                          CHECKTYPE
+   808  c719 a557               	LDA STAT	; GETSA intro with C=0
+   809  c71b c903               	CMP #STAT_VAR	; String status?
+   810  c71d 9042               	BCC ARRAY	; =1 -> arrays
+   811  c71f f0d1               	BEQ VAR		; =3 -> variables
+   812  c721 4ccbc6             	JMP DSTACK	; =5 -> SDS
+   813                          
+   814                          ; *** Look up arrays: ARYTAB to STREND
+   815                          
+   816  c724 8550               ARRAYS	STA PTR		; A/X set from simple variable processing,
+   817  c726 8651               	STX PTR+1	; pointing the start of arrays.
+   818  c728 a001               	LDY #STAT_ARY
+   819  c72a 8457               	STY STAT	; Set status to arrays
+   820                          ISARREND
+   821  c72c a550               	LDA PTR
+   822  c72e a651               	LDX PTR+1
+   823  c730 e432               CHKAEND	CPX STREND+1	; End of array area?
+   824  c732 d004                       BNE NEXTARR
+   825  c734 c531               	CMP STREND	; High byte matches, low byte is
+   826                          			; less or equal.
+   827  c736 f04f               	BEQ NOSTRING	; Arrays finished -> no string
+   828                          NEXTARR
+   829                          			; Carry always cleared because of CPX/CMP
+   830  c738 8522               	STA STRDP	; Start of an array
+   831  c73a 8623               	STX STRDP+1
+   832  c73c a000               	LDY #0
+   833  c73e b122               	LDA (STRDP),Y	; Array name
+   834  c740 aa                 	TAX		; Array type, keep it for later
+   835  c741 c8                 	INY
+   836  c742 b122               	LDA (STRDP),Y
+   837  c744 08                 	PHP		; Array type 2nd part, keep also
+   838  c745 c8                 	INY
+   839  c746 b122               	LDA (STRDP),Y	; Offset to next array
+   840  c748 6550               	ADC PTR		; C-flag is cleared (because of CMP/CPX above)
+   841  c74a 8550               	STA PTR		; Save start of following array
+   842  c74c c8                 	INY
+   843  c74d b122               	LDA (STRDP),Y
+   844  c74f 6551               	ADC PTR+1
+   845  c751 8551               	STA PTR+1
+   846  c753 28                 	PLP		; Fetch array type
+   847  c754 10d6               	BPL ISARREND	; Not a string array
+   848  c756 8a                 	TXA		; Fetch array type 2nd part
+   849  c757 30d3               	BMI ISARREND	; Not string array
+   850  c759 c8                 	INY
+   851  c75a b122               	LDA (STRDP),Y	; Number of dimensions
+   852  c75c 0a                 	ASL		; *2
+   853  c75d 6905               	ADC #5		; Offset = dimensions*2+5
+   854                          			; C=0 as long as dim.. <= 125
+   855  c75f d003               	BNE ADVDESC	; Branch always
+   856                          ARRAY			; Entry on continuation
+   857                          NEXTASTR
+   858  c761 18                 	CLC
+   859  c762 a903               	LDA #3		; String descriptor length
+   860  c764 6522               ADVDESC	ADC STRDP	; Advance to next string
+   861  c766 8522               	STA STRDP
+   862  c768 9002               	BCC +
+   863  c76a e623               	INC STRDP+1	; Overflow high byte
+   864  c76c c550               +	CMP PTR		; All array elements processed?
+   865  c76e d006               	BNE IS0ASTR
+   866  c770 a623               	LDX STRDP+1
+   867  c772 e451               	CPX PTR+1
+   868  c774 f0ba               	BEQ CHKAEND	; A/X = PTR, check for end of  array area
+   869                          IS0ASTR
+   870  c776 a000               	LDY #0
+   871  c778 b122               	LDA (STRDP),Y	; String length
+   872  c77a f0e5               	BEQ NEXTASTR	; Next array element
+   873                          RETGETSA
+   874  c77c 8552               	STA LEN		; Return value: length
+   875  c77e c8                 	INY
+   876  c77f b122               	LDA (STRDP),Y	; String address low
+   877  c781 aa                 	TAX
+   878  c782 c8                 	INY
+   879  c783 b122               	LDA (STRDP),Y	; String address high
+   880  c785 a8                 	TAY		; Always not zero, Z=0
+   881  c786 60                 	RTS		; Return address in X/Y
+   882                          NOSTRING
+   883  c787 a900               	LDA #0		; Length 0 
+   884  c789 8552               	STA LEN		; No string found
+   885  c78b 60                 	RTS		; Z=1
+   886                          
+   887                          ;
+   888                          ; *** Correct string Address in descriptor
+   889                          ;
+   890                          ; ( NEWPTR, STRDP, STAT -> )
+   891                          ;
+   892  c78c a557               CORR	LDA STAT	; String status
+   893  c78e 2903               	AND #%011	; Just 2 bits, giving the
+   894  c790 a8                 	TAY		; offset to the descriptor ...
+   895  c791 a54e               	LDA NEWPTR	;
+   896  c793 9122               	STA (STRDP),Y	; which differs for SDS
+   897  c795 c8                 	INY		; and array elements!
+   898  c796 a54f               	LDA NEWPTR+1
+   899  c798 9122               	STA (STRDP),Y
+   900  c79a 60                 	RTS
+   901                          
    902                          
-   903                          
-   904                          ;
-   905                          ; ***  MOVBLOCK routines (needed for IRQ hook method)
-   906                          ;
-   907                          
-   908                          !ifndef basic_patch {
-   909                          
-   910                            !ifndef orig_movblock {
-   911                          	; The optimized implementation:
-   912                          	;
-   913                          	; The "Open Space" routine from the BASIC ROM, $A3BF
-   914                          	; isn't available while switching off the KERNAL ROM, which
-   915                          	; switches the BASIC ROM off also. In this case we have to redefine
-   916                          	; this task with a separate routine which is shorter and slightly
-   917                          	; faster than the original from the ROM.
-   918                          
-   919                          	; Copy memory range($5F/$60) to excl. ($5A/$5B) to ($58/$59)
-   920                          	; Overlapping works as long as the destination address is below the
-   921                          	; source block.
-   922                          	; Input: $5F/$60 source start address
-   923                          	;	 $5A/$5B source end address+1
-   924                          	;	 $58/$59 destination start address
-   925                          	; Destroyed: A, X, Y
-   926                          	; Output: $58/$59 has the value destination end address +1
-   927                          	;          X = 0
-   928                          	;	   Y = 0 (if the block length is greater 0)
-   929                          	;	   Z-flag = 1
-   930                          MOVBLOCK
-   931  c79b 38                         SEC
-   932  c79c a55a                       LDA $5A       ; Source end address low
-   933  c79e e55f                       SBC $5F       ; Minus source begin address low
-   934  c7a0 a8                         TAY           ; Block length low
-   935  c7a1 a55b                       LDA $5B       ; Source end address high
-   936  c7a3 e560                       SBC $60       ; Minus source begin address high
-   937  c7a5 aa                         TAX           ; Block length high, usage as DEC-DEC counter
-   938  c7a6 98                         TYA           ; Length low
-   939  c7a7 f019                       BEQ copy      ; Nothing more to do if 0
-   940  c7a9 18                         CLC           ; Length in A
-   941  c7aa 655f                       ADC $5F       ; Source begin address corrected by 
-   942  c7ac 855f                       STA $5F       ; low-byte offset: -(-length) -> +length
-   943  c7ae b002                       BCS +         ; Because this is like a subtraction
-   944  c7b0 c660                       DEC $60       ; C=0 means to correct begin address high.
-   945                          +
-   946  c7b2 98                         TYA           ; Length low
-   947  c7b3 18                         CLC
-   948  c7b4 6558                       ADC $58       ; Destination begin address corrected by
-   949  c7b6 8558                       STA $58       ; low-byte offset: -(-length) -> +length
-   950  c7b8 b002                       BCS +         ; Because this is like a subtraction
-   951  c7ba c659                       DEC $59       ; C=0 means to correct begin address high.
-   952                          +
-   953  c7bc e8                 	INX           ; Page counter (all full and one partial)
-   954  c7bd 98                 	TYA           ; Length low
-   955  c7be 49ff               	EOR #$FF      ; Negate (two's complement):
-   956  c7c0 a8                 	TAY           ; NOT(X)+1
-   957  c7c1 c8                 	INY
-   958  c7c2 b15f               copy    LDA ($5F),Y   ; Copy source 
-   959  c7c4 9158                       STA ($58),Y   ; to destination, with increasing addresses
-   960  c7c6 c8                         INY
-   961  c7c7 d0f9                       BNE copy
-   962  c7c9 e660                       INC $60       ; Source high
-   963  c7cb e659                       INC $59       ; Destination high
-   964  c7cd ca                         DEX           ; Block counter
-   965  c7ce d0f2                       BNE copy
-   966  c7d0 60                         RTS
-   967                          	; Takes 6 bytes less compared to the original routine.
-   968                          
-   969                            } else {
-   970                          
-   971                          	; The original routine taken from the ROM:
-   972                          	;
-   973                          	; The "Open Space" routine from the BASIC ROM, $A3BF
-   974                          	; isn't available while switching off the KERNAL ROM, which
-   975                          	; switches the BASIC ROM off also. In this case we have to redefine
-   976                          	; this task with a separate routine which is shorter and slightly
-   977                          	; faster than the original from the ROM.
-   978                          
-   979                          	; Copy memory range($5F/$60) to excl. ($5A/$5B) to ($58/$59)
-   980                          	; Overlapping works as long as the destination's end address is 
-   981                          	; above the source block.
-   982                          	; Input: $5F/$60 source start address
-   983                          	;	 $5A/$5B source end address+1
-   984                          	;	 $58/$59 destination end address+1
-   985                          	; Destroyed: A, X, Y
-   986                          	; Output: $58/$59 has the value destination end address+1-256
-   987                          	;          X = 0
-   988                          	;	   Y = 0 (if the block length is greater 0)
-   989                          	;	   Z-flag = 1
-   990                          
-   991                          MOVBLOCK
-   992                                  SEC
-   993                                  LDA $5A       ; End address low
-   994                                  SBC $5F       ; Minus begin address low
-   995                                  STA $22       ; Length low
-   996                                  TAY
-   997                                  LDA $5B       ; End address high
-   998                                  SBC $60       ; Minus begin address high
-   999                                  TAX           ; Length high
-  1000                                  INX           ; Length as DEC-DEC counter
-  1001                                  TYA           ; Length low
-  1002                                  BEQ +         ; If not zero, then correct
-  1003                                  LDA $5A       ; the end address by low-byte offset
-  1004                                  SEC           ; from length.
-  1005                                  SBC $22       ; Length low
-  1006                                  STA $5A       ;
-  1007                                  BCS ++
-  1008                                  DEC $5B       ; Overflow high byte 
-  1009                                  SEC
-  1010                          ++      LDA $58       ; Correct the destination end address
-  1011                                  SBC $22       ; by low-byte offset (length low).
-  1012                                  STA $58
-  1013                                  BCS +++	      ; Overflow high byte
-  1014                                  DEC $59       ; 
-  1015                                  BCC +++
-  1016                          -       LDA ($5A),Y   ; Copy source to destination
-  1017                                  STA ($58),Y   ; from higher to lower addresses.
-  1018                          +++     DEY
-  1019                                  BNE -
-  1020                                  LDA ($5A),Y   ; Source
-  1021                                  STA ($58),Y   ; Destination
-  1022                          +       DEC $5B       ; Source high
-  1023                                  DEC $59       ; Destination high
-  1024                                  DEX           ; Block counter
-  1025                                  BNE --
-  1026                                  RTS
-  1027                            }
-  1028                          }
+   903                          ;
+   904                          ; ***  MOVBLOCK routines (needed for IRQ hook method)
+   905                          ;
+   906                          
+   907                          !ifndef basic_patch {
+   908                          
+   909                            !ifndef orig_movblock {
+   910                          	; The optimized implementation:
+   911                          	;
+   912                          	; The "Open Space" routine from the BASIC ROM, $A3BF
+   913                          	; isn't available while switching off the KERNAL ROM, which
+   914                          	; switches the BASIC ROM off also. In this case we have to redefine
+   915                          	; this task with a separate routine which is shorter and slightly
+   916                          	; faster than the original from the ROM.
+   917                          
+   918                          	; Copy memory range($5F/$60) to excl. ($5A/$5B) to ($58/$59)
+   919                          	; Overlapping works as long as the destination address is below the
+   920                          	; source block.
+   921                          	; Input: $5F/$60 source start address
+   922                          	;	 $5A/$5B source end address+1
+   923                          	;	 $58/$59 destination start address
+   924                          	; Destroyed: A, X, Y
+   925                          	; Output: $58/$59 has the value destination end address +1
+   926                          	;          X = 0
+   927                          	;	   Y = 0 (if the block length is greater 0)
+   928                          	;	   Z-flag = 1
+   929                          MOVBLOCK
+   930  c79b 38                         SEC
+   931  c79c a55a                       LDA $5A       ; Source end address low
+   932  c79e e55f                       SBC $5F       ; Minus source begin address low
+   933  c7a0 a8                         TAY           ; Block length low
+   934  c7a1 a55b                       LDA $5B       ; Source end address high
+   935  c7a3 e560                       SBC $60       ; Minus source begin address high
+   936  c7a5 aa                         TAX           ; Block length high, usage as DEC-DEC counter
+   937  c7a6 98                         TYA           ; Length low
+   938  c7a7 f019                       BEQ copy      ; Nothing more to do if 0
+   939  c7a9 18                         CLC           ; Length in A
+   940  c7aa 655f                       ADC $5F       ; Source begin address corrected by 
+   941  c7ac 855f                       STA $5F       ; low-byte offset: -(-length) -> +length
+   942  c7ae b002                       BCS +         ; Because this is like a subtraction
+   943  c7b0 c660                       DEC $60       ; C=0 means to correct begin address high.
+   944                          +
+   945  c7b2 98                         TYA           ; Length low
+   946  c7b3 18                         CLC
+   947  c7b4 6558                       ADC $58       ; Destination begin address corrected by
+   948  c7b6 8558                       STA $58       ; low-byte offset: -(-length) -> +length
+   949  c7b8 b002                       BCS +         ; Because this is like a subtraction
+   950  c7ba c659                       DEC $59       ; C=0 means to correct begin address high.
+   951                          +
+   952  c7bc e8                 	INX           ; Page counter (all full and one partial)
+   953  c7bd 98                 	TYA           ; Length low
+   954  c7be 49ff               	EOR #$FF      ; Negate (two's complement):
+   955  c7c0 a8                 	TAY           ; NOT(X)+1
+   956  c7c1 c8                 	INY
+   957  c7c2 b15f               copy    LDA ($5F),Y   ; Copy source 
+   958  c7c4 9158                       STA ($58),Y   ; to destination, with increasing addresses
+   959  c7c6 c8                         INY
+   960  c7c7 d0f9                       BNE copy
+   961  c7c9 e660                       INC $60       ; Source high
+   962  c7cb e659                       INC $59       ; Destination high
+   963  c7cd ca                         DEX           ; Block counter
+   964  c7ce d0f2                       BNE copy
+   965  c7d0 60                         RTS
+   966                          	; Takes 6 bytes less compared to the original routine.
+   967                          
+   968                            } else {
+   969                          
+   970                          	; The original routine taken from the ROM:
+   971                          	;
+   972                          	; The "Open Space" routine from the BASIC ROM, $A3BF
+   973                          	; isn't available while switching off the KERNAL ROM, which
+   974                          	; switches the BASIC ROM off also. In this case we have to redefine
+   975                          	; this task with a separate routine which is shorter and slightly
+   976                          	; faster than the original from the ROM.
+   977                          
+   978                          	; Copy memory range($5F/$60) to excl. ($5A/$5B) to ($58/$59)
+   979                          	; Overlapping works as long as the destination's end address is 
+   980                          	; above the source block.
+   981                          	; Input: $5F/$60 source start address
+   982                          	;	 $5A/$5B source end address+1
+   983                          	;	 $58/$59 destination end address+1
+   984                          	; Destroyed: A, X, Y
+   985                          	; Output: $58/$59 has the value destination end address+1-256
+   986                          	;          X = 0
+   987                          	;	   Y = 0 (if the block length is greater 0)
+   988                          	;	   Z-flag = 1
+   989                          
+   990                          MOVBLOCK
+   991                                  SEC
+   992                                  LDA $5A       ; End address low
+   993                                  SBC $5F       ; Minus begin address low
+   994                                  STA $22       ; Length low
+   995                                  TAY
+   996                                  LDA $5B       ; End address high
+   997                                  SBC $60       ; Minus begin address high
+   998                                  TAX           ; Length high
+   999                                  INX           ; Length as DEC-DEC counter
+  1000                                  TYA           ; Length low
+  1001                                  BEQ +         ; If not zero, then correct
+  1002                                  LDA $5A       ; the end address by low-byte offset
+  1003                                  SEC           ; from length.
+  1004                                  SBC $22       ; Length low
+  1005                                  STA $5A       ;
+  1006                                  BCS ++
+  1007                                  DEC $5B       ; Overflow high byte 
+  1008                                  SEC
+  1009                          ++      LDA $58       ; Correct the destination end address
+  1010                                  SBC $22       ; by low-byte offset (length low).
+  1011                                  STA $58
+  1012                                  BCS +++	      ; Overflow high byte
+  1013                                  DEC $59       ; 
+  1014                                  BCC +++
+  1015                          -       LDA ($5A),Y   ; Copy source to destination
+  1016                                  STA ($58),Y   ; from higher to lower addresses.
+  1017                          +++     DEY
+  1018                                  BNE -
+  1019                                  LDA ($5A),Y   ; Source
+  1020                                  STA ($58),Y   ; Destination
+  1021                          +       DEC $5B       ; Source high
+  1022                                  DEC $59       ; Destination high
+  1023                                  DEX           ; Block counter
+  1024                                  BNE --
+  1025                                  RTS
+  1026                            }
+  1027                          }
+  1028                          
   1029                          
-  1030                          
-  1031                          !ifdef debug {
-  1032                          !source "debug.asm"
-  1033                          }
-  1034                          
-  1035                          !ifndef no_indicator {
-  1036  c7d1 00                 ORIGVID !byte 0		; Original character of marker position
-  1037  c7d2 00                 ORIGCOL !byte 0		; Original color of marker position
-  1038                          }
-  1039                          !ifndef basic_patch {
-  1040  c7d3 0000               ORIGIRQ !byte 0,0	; Original IRQ vector
-  1041                          }
-  1042  c7d5 00                 SAVE	!byte 0		; Saved zero-page variables
-  1043                          *=*+ZPLEN-1
+  1030                          !ifdef debug {
+  1031                          !source "debug.asm"
+  1032                          }
+  1033                          
+  1034                          !ifndef no_indicator {
+  1035  c7d1 00                 ORIGVID !byte 0		; Original character of marker position
+  1036  c7d2 00                 ORIGCOL !byte 0		; Original color of marker position
+  1037                          }
+  1038                          !ifndef basic_patch {
+  1039  c7d3 0000               ORIGIRQ !byte 0,0	; Original IRQ vector
+  1040                          }
+  1041  c7d5 00                 SAVE	!byte 0		; Saved zero-page variables
+  1042                          *=*+ZPLEN-1
+  1043                          
   1044                          
-  1045                          

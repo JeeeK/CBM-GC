@@ -6,7 +6,7 @@
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
 ; * 2019-02-15 VERS. 2.1  *
-; * 2020-12-12 VERS. 2.2  *
+; * 2020-12-14 VERS. 2.2  *
 ; *************************
 ;
 ; Räumt Stringspeicher auf, indem Lücken von unbenutzten String
@@ -288,8 +288,6 @@ CALLER_SNS2   = $B548+2 ; der "Search for Next String"-Routine
 CALLER_SNS3   = $B5B8+2
 
 IRQ
-	SEI
-
 	; IRQ-Stackframe:
 	; $104,X Status-Reg
 	; $105,X Low-PC
@@ -386,9 +384,8 @@ CHK_PC
 	BCC +		; unterhalb, keine Stack-Korrektur
 	CMP #<(GC_PHP_END+1)
 	BCS +		; darüber, keine Stack-Korrektur
-	; Stack-Korrektur:
-	PLA		; SR vom Stack nehmen, setzt ev. Flags N,Z aber nicht C
-	BCC TO_COLLECT	; C immer 0, mittels RTI zu COLLECT
+	LDA #<(SKIPPHP)	; von RTI aufgerufene Routine, um 1 Byte vom Stack
+	BCC IN_PHP	; zu nehmen - C immer 0, SKIPHP nach RTI aufrufen
 +
 	; in kritischer Sektion?
 	!if >(GC_CRIT_START) != >(GC_CRIT_END+1) {
@@ -435,9 +432,10 @@ TO_COLLECT
 	BNE CONT	; IRQ fortsetzen, RTI startet dann die neue GC ...
 
 SKIPSUB			; Open-Space- oder Search-for-Next-String-Routine
-	PLA		; abgebrochen: kommt direkt von RTI, Aufruf-PC
-	PLA		; (für RTS) in alter GC verwerfen und die neue GC
-			; übernimmt, geht direkt zu COLLECT.
+	PLA		; abgebrochen: Aufruf-PC (für RTS) verwerfen
+SKIPPHP			; oder
+	PLA		; nur PHP verwerfen
+			; und Ausführung weiter direkt bei neuer GC (COLLECT)
 START_COLLECT
 	LDA #3
 	STA $53		; Step-Size für nächsten Descriptor auf

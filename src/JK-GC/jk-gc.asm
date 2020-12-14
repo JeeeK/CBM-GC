@@ -6,7 +6,7 @@
 ; * 1985-12-27 VERS. 1.1  *
 ; * 2013-11-24 VERS. 2.0  *
 ; * 2019-02-15 VERS. 2.1  *
-; * 2020-12-12 VERS. 2.2  *
+; * 2020-12-14 VERS. 2.2  *
 ; *************************
 ;
 ; Collects unused (garbage) strings on the string heap,
@@ -286,8 +286,6 @@ CALLER_SNS2   = $B548+2 ; if in routine "Search for Next String"
 CALLER_SNS3   = $B5B8+2
 
 IRQ
-	SEI
-
 	; IRQ stack frame:
 	; $104,X status register
 	; $105,X low byte PC
@@ -348,6 +346,7 @@ CHK_SNS			; We are in "Search for Next String"?
 
 IN_SUB
 	LDA #<(SKIPSUB) ; Redirect by changing the interruption PC
+IN_PHP
 	STA $105,X	; Low byte
 	LDA #>(SKIPSUB)
 	STA $106,X	; High byte
@@ -384,9 +383,8 @@ CHK_PC
 	BCC +		; Below, no stack correction
 	CMP #<(GC_PHP_END+1)
 	BCS +		; Above, no stack correction
-	; Stack-Korrektur:
-	PLA		; Remove SR from stack, N and Z changed, but not C
-	BCC TO_COLLECT	; C always 0, RTI passes control to COLLECT
+	LDA #<(SKIPPHP) ; RTI called routine - removes one byte from stack
+	BCC IN_PHP	; C always 0, delays SKIPHP to past RTI
 +
 	; In critical section?
 	!if >(GC_CRIT_START) != >(GC_CRIT_END+1) {
@@ -433,8 +431,9 @@ TO_COLLECT
 
 SKIPSUB			; Open-Space or Search-for-Next-String routine aborted:
 	PLA		; Called by RTI, remove the caller PC (for RTS)
-	PLA		; leading back into the GC, transfer execution directly
-			; to the new GC (COLLECT).
+			; or
+SKIPPHP			; remove the PHP
+	PLA		; transfer execution directly to the new GC (COLLECT).
 START_COLLECT
 	LDA #3
 	STA $53		; Step size to the next descriptor set to

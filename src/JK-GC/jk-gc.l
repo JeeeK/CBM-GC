@@ -4,6 +4,7 @@
 	NOSTRING	= $c791	; ?
 	VARTAB	= $2d
 	GETSA	= $c6c7	; ?
+	IN_PHP	= $c561
 	DSTACK	= $c6d5
 	IRQ	= $c524	; ?
 	MARKCHAR	= $2a
@@ -19,11 +20,11 @@
 	KERNAL	= $e000	; unused
 	BASIC	= $a000
 	GARBCOL	= $b526	; unused
-	TO_COLLECT	= $c5b1	; ?
+	TO_COLLECT	= $c5b1	; unused
 	COLBASE	= $d800	; ?
 	MARKCOL	= $9
-	CORR_STR	= $c540	; ?
-	CHK_PC	= $c56d	; ?
+	CORR_STR	= $c53f	; ?
+	CHK_PC	= $c56c	; ?
 	NOCOPY	= $c6c4	; ?
 	EXIT	= $c628	; ?
 	ZPLEN	= $7
@@ -41,7 +42,7 @@
 	NEXTBYT	= $c67a
 	STRINRANGE	= $c64a	; ?
 	ZPSTART	= $4c
-	IN_SUB	= $c560	; ?
+	IN_SUB	= $c55f	; ?
 	NEXTVAR	= $c6fc
 	BUF	= $a000
 	GC_PHP_START	= $b58a
@@ -64,14 +65,14 @@
 	VIDBASE	= $400	; ?
 	V_IRQ	= $314
 	MEMEND	= $37
-	IN_OPSP	= $c534	; unused
+	IN_OPSP	= $c533	; unused
 	ORIGVID	= $c7db	; ?
 	TSSP	= $16
 	STREND	= $31
 	GC_CRIT_59	= $b635
 	start	= $c500
 	RNGEND	= $5d
-	CHK_SNS	= $c550	; ?
+	CHK_SNS	= $c54f	; ?
 	NEXTSTR	= $c654
 	START_COLLECT	= $c5bf	; ?
 	CALLER_SNS2	= $b54a
@@ -84,7 +85,7 @@
 	MEMSIZ	= $37
 	CORR	= $c796	; ?
 	MARKOFF	= $3e7
-	CONT	= $c56a	; ?
+	CONT	= $c569	; ?
 	ARRAYS	= $c72e	; ?
 	INSTALL	= $c500	; unused
 	CALLER_OPSP	= $b62a
@@ -98,6 +99,7 @@
 	BUFPTR	= $5f
 	ORIGCOL	= $c7dc	; ?
 	MEMROM	= $37	; unused
+	SKIPPHP	= $c5be	; ?
 	RNGBEG	= $4c
 	VIDPAGE	= $288
 	GC_START	= $b526
