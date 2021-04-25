@@ -3,6 +3,15 @@ CBM-GC
 
 Commodore 8-Bit Garbage Collection Implementations
 
+Back-Link On Demand Garbage Collection
+--------------------------------------
+
+This version replaces the C64 BASIC V2.0 with a linear run-time behavior. It uses a back-link structure which will be built up on demand just right befor the garbage collection. The string heap management (disposing memory on the) needs special handling which is accomplished by hooking three critical locations in the BASIC interpreter (in addition to the GC routine hook).
+
+* [Source (BLOD-GC)](src/BLOD-GC)
+* [D64 image (BLOD-GC)](images/blodgc-2021-distrib.d64)
+
+
 Super Garbage Collection
 ------------------------
 
