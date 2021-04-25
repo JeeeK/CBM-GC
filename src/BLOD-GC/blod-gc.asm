@@ -479,12 +479,14 @@ NOGAP	STA DESC+1	; Backlink high and
 	LDX PTR+1	; Transfer to STR ...
 			; Carry clear from CMP #$FF
 	ADC #3		; -(LEN-2) + PTR -> PTR
-	BEQ +		; PTR already in position
-			; A before add. was in range 0 to FC
+	BNE +		; PTR already in position
+			; Special case length = 2:
+	INX		; compensate for the high byte decrement
+	CLC		; Adding 0 with carry cleared, leaves PTR unchanged.
++	ADC PTR		; Accumulator before add. was in range 0 to FC
 			; which never sets the carry!
-	ADC PTR
 	BCS +
-	DEX
+	DEX		; In case of adding 0 X is already compensated.
 +	STX STR+1	; STR points to string start.
 	STA STR
 	

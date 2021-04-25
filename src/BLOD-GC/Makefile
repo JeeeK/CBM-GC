@@ -20,7 +20,7 @@ all: blod-gc.o
 
 
 $(F).o: $(F).asm
-	acme -Dstart='$(START)' -Dbasic_patch=1 -v3 -f cbm -o $(F).o -l $(F).l -r $(F).r $(F).asm
+	acme -Dstart='$(START)' -v3 -f cbm -o $(F).o -l $(F).l -r $(F).r $(F).asm
 
 
 clean:
