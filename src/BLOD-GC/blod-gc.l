@@ -16,7 +16,7 @@
 	STAT_VAR	= $4
 	NEXTARR	= $c7c1	; ?
 	IS0ASTR	= $c7ff	; ?
-	KERNAL	= $e000
+	KERNAL	= $e000	; unused
 	BASIC	= $a000
 	GARBCOL	= $b526
 	COLBASE	= $d800	; ?
@@ -32,14 +32,12 @@
 	ADVDESC	= $c7ed	; ?
 	STAT_ARY	= $1
 	NEXTVAR	= $c77b
-	BUF	= $e000	; unused
 	EOSS	= $22	; unused
 	NEXT1STR	= $c705
 	ISARREND	= $c7b5
 	NEXTASTR	= $c7ea
 	STAT	= $57
 	MARKVPOS	= $7e7	; ?	; unused
-	BUFSIZE	= $2000	; unused
 	DESCSTACK	= $c748	; unused
 	COLLECT	= $c5e1	; ?
 	TOSS	= $19
@@ -54,7 +52,7 @@
 	NEXTSTR	= $c604
 	STAGE1	= $c603	; unused
 	STAGE2	= $c65b	; ?
-	ROMSIZE	= $2000
+	ROMSIZE	= $2000	; unused
 	STAGE3	= $c703	; unused
 	CHECKVAR	= $c790	; ?
 	FREE	= $c570
