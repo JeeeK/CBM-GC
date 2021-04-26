@@ -1,17 +1,17 @@
 ;
 ; **********************************
 ; *  BACKLINK GARBAGE  COLLECTION  *
-; *        from Johann Klasek      *
+; *        von  Johann Klasek      *
 ; *        j AT klasek DOT at      *
 ; *       2021-03-30 VERS. 1.0     *
 ; **********************************
 ;
-; Collects unused (garbage) strings on the string heap,
-; replacing the BASIC 2.0 garbage collector on a C64.
-; Only those locations which is used by the legacy garbage
-; collector are in use here.
+; Räumt Stringspeicher auf, indem Lücken von unbenutzten String
+; entfernt werden und ersetzt die C64 BASIC V2.0 Garbage Collection.
+; Es werden nur jene Speicherstellen benutzt, die auch die normale
+; GC verwendet.
 
-; Start of code ...
+; Start des Codes ...
 
 !ifdef start {
 	*=start
@@ -19,137 +19,137 @@
 	*= $C500
 }
 
-; Options:
 
-; Do not display an activiation mark on screen
+; Optionen:
+
+; Bildschirmmarkierung nicht verwenden
 ;no_indicator = 1
 
 
+; BASIC Systemvariablen
 
-; BASIC system variables
+TOSS     = $19		; Top of Stringstack
+EOSS     = $22		; End of Stringstack +1
+TSSP     = $16		; Temp. Stringstack Pointer
 
-TOSS     = $19		; Top of String Descriptor Stack
-EOSS     = $22		; End of String Descriptor Stack +1
-TSSP     = $16		; Current String Descriptor Stack pointer
-
-VARTAB   = $2D		; End of BASIC program = begin of variable area
-ARYTAB   = $2F		; End of variables = begin of arrays
-STREND   = $31		; End of arrays = lowest possible string heap address
-FRETOP   = $33		; Current string heap address
-MEMSIZ   = $37		; Highest RAM address for BASIC, start of
-			; string heap growing downwards.
-MEMBEG   = STREND	; String heap memory begin = STREND
-MEMEND   = MEMSIZ	; String heap memory end
+VARTAB   = $2D		; BASIC-Programmende = Variablenanfang
+ARYTAB   = $2F		; Variablenende = Arraybereichanfang
+STREND   = $31		; Arraybereichende = unterste String-Heap-Adresse
+FRETOP   = $33		; aktuelle String-Heap-Adresse
+MEMSIZ   = $37		; höchste RAM-Adresse für BASIC, Start
+			; des nach unten wachsenden String-Heaps
+MEMBEG   = STREND	; Memory begin = STREND
+MEMEND   = MEMSIZ	; Memory end
 
 
-; variables
+; Variablen
 
-HEAP     = FRETOP	; String pointer = FRETOP
-STRDP    = $22		; String descriptor address (used in stage 1+3: GETSA in/out)
-CPTR     = $22		; Pointer for installer routine (used in installer)
-NEWHEAP  = $22		; New heap pointer (used in stage 2)
+HEAP     = FRETOP	; String-Pointer = FRETOP
+STRDP    = $22		; String-Descriptor-Address (Stage 1+3: GETSA in/out)
+CPTR     = $22		; Pointer für Install-Routine
+NEWHEAP  = $22		; Neuer Heap-Pointer (Stage 2)
 
-STAT     = $57		; String status, for values in use,
-			; see STAT_* below (GETSA in/out)
-DESC     = $58		; String descriptor address (temp.)
+STAT     = $57		; String-Status, Werte siehe
+			; STAT_* weiter unten (GETSA in/out).
+DESC     = $58		; String-Address (temp.)
 STR      = $5A		; Points to a string
 LEN      = $5D		; String length (GETSA out)
 PTR      = $5F		; Array pointer (GETSA in/out)
 
 
+; Konstanten
 
-; Constants
-
+; für Variabe STAT (String-Status):
 ; for variable STAT (string status):
-STAT_SDS = 0		; Is on String Descriptor Stack
-STAT_VAR = 4		; Is a simple variable
-STAT_ARY = 1		; Is in a array
+STAT_SDS = 0		; String-Descriptor-Stack
+STAT_VAR = 4		; einfache Variablen
+STAT_ARY = 1		; Array
 
-; Memory configuration for PROCPORT:
-MEMROM   = %00110111	; BASIC+KERNAL ROM, $37
-MEMBAS   = %00110110	; BASIC RAM+KERNAL ROM, $34
-MEMRAM   = %00110101	; BASIC+KERNAL RAM, $35
+; für PROCPORT, Speicherkonfigurationen:
+MEMROM   = %00110111	; Basic+Kernal ROM, $37
+MEMBAS   = %00110110	; Basic RAM+Kernal ROM, $34
+MEMRAM   = %00110101	; Basic+Kernal RAM, $35
 
-; for activity indicator
-MARKCHAR = "*"          ; Indicator character
-MARKCOL  = 9            ; Indicator color (red)
-MARKOFF  = 40*25-1      ; indicator position (lower right corner)
+; für Aktivitätsanzeige
+MARKCHAR = "*"		; Markierungszeichen
+MARKCOL  = 9		; Markierungsfarbe (rot)
+MARKOFF  = 40*25-1	; Markenposition (Ecke rechts unten)
 MARKVPOS = VIDBASE+MARKOFF
 MARKCPOS = COLBASE+MARKOFF
 
 
-; Memory locations
+; Speicherorte
 
-GARBCOL  = $B526	; Entry point of the legacy GC
-PATCH1   = $AA6C	; Overwrite string to variable
-PATCH2   = $B66A	; String concatenation: 2nd argument handling
-PATCH3   = $B726	; LEFT$() copy string
+GARBCOL  = $B526	; Einsprungpunkt der GC
+PATCH1   = $AA6C	; String-Variable überschreiben
+PATCH2   = $B66A	; String-Addition: Behandlung des 2. Arguments
+PATCH3   = $B726	; LEFT$() String kopieren
 
-BASIC    = $A000        ; BASIC ROM
-KERNAL   = $E000        ; KERNAL ROM
-ROMSIZE  = $2000        ; ROM length, 8 Kbyte
+BASIC    = $A000	; BASIC-ROM
+KERNAL   = $E000	; KERNAL-ROM
+ROMSIZE  = $2000	; ROM-Länge, 8 KByte
 
-VIDPAGE	 = $288		; Page of video RAM
+VIDPAGE  = $288		; Video RAM Page
 VIDBASE  = $0400	; Video RAM
 COLBASE  = $D800	; Color RAM
 
-PROCPORT = $01		; Processor port
-
+PROCPORT = $01		; Prozessorport
 
 
 ; Installer
 
+
 INSTALL
 
-	!byte $2C	; Opcode BIT absolute, Argument 
-			; contains the signature, acts as NOP.
-	!text "GC"	; Signature for the loader,
-			; the same an on a fixed
-			; location for all variants!
+	!byte $2C	; Opcode von BIT absolute, Argument
+			; enthält die Signature, wirkt als NOP
+	!text "GC"	; Signatur für den BASIC-Loader,
+			; immer an gleicher Stelle für
+			; alle Varianten!
 
-	; BASIC-ROM/RAM patch hook
 
-	; copy BASIC into RAM to patch the GC routine
+	; BASIC ins RAM kopieren, um die GC-Routine
+	; zu patchen ...
 	LDA #MEMROM
-	STA PROCPORT	; All ROM (where to copy from)
-	LDY #<BASIC	; ROM start
+	STA PROCPORT	; alles ROM (also vom ROM kopieren)
+	LDY #<BASIC	; ROM-Beginn
 	STY CPTR
 	LDA #>BASIC
-	STA CPTR+1	; BASIC ROM start
-	LDX #>($2000)	; BASIC ROM length in pages
-CPYROM	LDA (CPTR),Y	; Read from ROM
-	STA (CPTR),Y	; Write to RAM
+	STA CPTR+1	; BASIC-ROM Anfang
+	LDX #>($2000)	; BASIC-ROM Länge in Pages
+CPYROM	LDA (CPTR),Y	; ROM lesen
+	STA (CPTR),Y	; RAM schreiben
 	INY
 	BNE CPYROM
-	INC CPTR+1	; Next page
-	DEX		; Page counter
+	INC CPTR+1	; nächste Page
+	DEX		; Page-Zähler
 	BNE CPYROM
 
-	LDA PROCPORT	; Switch to RAM
-	AND #%11111110	; "BASIC off" mask
+	LDA PROCPORT	; auf RAM umschalten
+	AND #%11111110	; "BASIC-ROM aus"-Maske
 	STA PROCPORT
 
-	LDA #<HANDLE1	; let JSR in place!
+	LDA #<HANDLE1	; JSR bereits vorhanden!
 	STA PATCH1+1
 	LDA #>HANDLE1
 	STA PATCH1+2
 
-	LDA #<HANDLE2	; let JSR in place!
+	LDA #<HANDLE2	; JSR bereits vorhanden!
 	STA PATCH2+1
 	LDA #>HANDLE2
 	STA PATCH2+2
 
-	LDA #<HANDLE3	; let JSR in place!
+	LDA #<HANDLE3	; JSR bereits vorhanden!
 	STA PATCH3+1
 	LDA #>HANDLE3
 	STA PATCH3+2
 
-	LDA #<COLLECT	; Write "JMP COLLECT"
-	STA GARBCOL+1	; patch code.
+	LDA #<COLLECT	; "JMP COLLECT"
+	STA GARBCOL+1	; patchen ...
 	LDA #>COLLECT
 	STA GARBCOL+2
 
-	LDA #$4C	; The "JMP" opcode
+	LDA #$4C	; JMP-Opcode
 	STA GARBCOL
 	RTS
 
@@ -311,8 +311,8 @@ COLLECT
 
 !ifndef no_indicator {
 	LDX #0
-	STX CPTR	; Pointer low byte = 0
-	LDX VIDPAGE	; Startpage of video RAM
+	STX CPTR	; Zeiger Low-Byte = 0
+	LDX VIDPAGE	; Start-Page des Video-RAMs
 	!if (>MARKOFF) >= 1 {
 	INX
 	!if (>MARKOFF) >= 2 {
@@ -320,17 +320,17 @@ COLLECT
 	!if (>MARKOFF) >= 3 {
 	INX
 	} } }
-	; X contains now the page plus the offset's high byte
+	; X enthält die Basis-Page und die Pages des Offsets
 	STX CPTR+1
 	LDY #<(MARKOFF)
-	LDA (CPTR),Y	; Activity indicator on screen:
-	STA ORIGVID	; Save current character
+	LDA (CPTR),Y	; Kontrollanzeige Bildschirm
+	STA ORIGVID	; altes Zeichen sichern
 	LDA #MARKCHAR
-	STA (CPTR),Y	; Set mark character
-	LDA MARKCPOS	; Same for the color information
-	STA ORIGCOL	; Save current color
+	STA (CPTR),Y	; Zeichen der Marke setzen
+	LDA MARKCPOS	; gleiches für die Farbe
+	STA ORIGCOL	; Farbe sichern
 	LDA #MARKCOL
-	STA MARKCPOS	; Set mark color
+	STA MARKCPOS	; Farbe der Marke setzen
 }
 
 
@@ -582,43 +582,43 @@ EXIT
 
 !ifndef no_indicator {
 	LDX #0
-        STX CPTR        ; Pointer low byte = 0
-        LDX VIDPAGE     ; Startpage of video RAM
-        !if (>MARKOFF) >= 1 {
-        INX
-        !if (>MARKOFF) >= 2 {
-        INX
-        !if (>MARKOFF) >= 3 {
-        INX
-        } } }
-        ; X contains now the page plus the offset's high byte
-        STX CPTR+1
-        LDY #<(MARKOFF)
-        LDA ORIGVID     ; Clear activation indicator:
-        STA (CPTR),Y    ; restore character on screen
-        LDA ORIGCOL     ; and its color.
-        STA MARKCPOS
+	STX CPTR	; Zeiger Low-Byte = 0
+	LDX VIDPAGE	; Start-Page des Video-RAMs
+	!if (>MARKOFF) >= 1 {
+	INX
+	!if (>MARKOFF) >= 2 {
+	INX
+	!if (>MARKOFF) >= 3 {
+	INX
+	} } }
+	; X enthält die Basis-Page und die Pages des Offsets
+	STX CPTR+1
+	LDY #<(MARKOFF)
+	LDA ORIGVID	; Kontrollanzeige löschen
+	STA (CPTR),Y	; und alten Zustand wieder
+	LDA ORIGCOL	; herstellen.
+	STA MARKCPOS
 }
 	RTS
 
 
 ;
-; *** Get String - fetch next string with length > 0
+; *** Get String - nächsten String mit Länge ungleich 0
 ;
-; ( C-flag, STAT, STRDP, PTR -> STRDP, LEN, STAT, X, Y, Z-flag )
-; 
-; STAT >> 1 -> offset to descriptor relative to pointer STRDP.
+; ( C-Flag, STAT, STRDP, PTR -> STRDP, LEN, STAT, X, Y, Z-Flag )
 ;
-; If C=1 start from the beginning at SDS, otherwise
-; continue with position STRDP and string status STAT.
-; If the Z-Flag is set no string is available,
-; otherwise X/Y contains the address and LEN
-; the length of the string.
+; STAT >> 1 -> Versatz zum Descriptor relativ zu Zeiger STRDP.
+;
+; Bei C=1 wird beim SDS gestartet, sonst von der letzten
+; Position gemäß STRDP und String-Status STAT.
+; Das Z-Flag ist gesetzt, wenn kein String mehr
+; vorhanden ist, sonst in X/Y die Adresse und in LEN
+; die Stringlänge.
 
-GETSA   BCC CHECKTYPE   ; C=0 -> continue with string according to STAT
-                        ; otherwise start with at SDS ...
+GETSA	BCC CHECKTYPE	; C=0 -> nächsten String laut STAT
+			; sonst Start bei SDS ...
 
-; *** Look up String Descriptor Stack (SDS): TOSS to TSSP
+; *** Suche in String-Descriptor-Stack (SDS): TOSS bis TSSP
 ;
 ;    +-------------+
 ;    |             V
@@ -632,149 +632,149 @@ GETSA   BCC CHECKTYPE   ; C=0 -> continue with string according to STAT
 
 DESCSTACK
 	LDY #0
-	STY STRDP+1	; Zero descriptor pointer high
-	LDA #STAT_SDS	; Set status to SDS
+	STY STRDP+1	; Descriptor High-Byte auf 0
+	LDA #STAT_SDS	; Status: SDS
 	STA STAT
-	LDX #TOSS	; Start of SDS
-	BNE ISDSTEND	; branch always
+	LDX #TOSS	; SDS-Start
+	BNE ISDSTEND	; immer verzweigen
 DSTACK	LDX STRDP
-NEXTDST	INX		; next descriptor
+NEXTDST	INX		; nächster Descriptor
 	INX
 	INX
 ISDSTEND
-	CPX TSSP	; SDS finished?
+	CPX TSSP	; fertig mit SDS?
 	BEQ VARS
-	LDA 0,X		; Check string length
+	LDA 0,X		; prüfe String-Länge
 	BEQ NEXTDST
-	STA LEN		; Return variables:
-	STX STRDP	; length, descriptor address
-	LDA 2,X		; String address high
+	STA LEN		; Rückgabevariablen:
+	STX STRDP	; Länge und Descriptor-Adresse
+	LDA 2,X		; String-Adr. high
 	TAY
-	LDA 1,X		; String address low
+	LDA 1,X		; String-Adr. low
 	TAX
-	TYA		; Always not zero, Z=0
-	RTS		; Returns address in X/Y
+	TYA		; immer ungleich 0, Z=0
+	RTS		; Adresse in X/Y retour
 
-; *** Look up simple variables: VARTAB to ARYTAB
+; *** Suche in einfachen Variablen: VARTAB bis ARYTAB
 
-VARS	LDA VARTAB	; Begin of variables
+VARS	LDA VARTAB	; Variablenanfang
 	LDX VARTAB+1
 	STA STRDP
 	STX STRDP+1
-	LDY #STAT_VAR	; Set status to variables
+	LDY #STAT_VAR	; Status: einfache Variablen
 	STY STAT
-	BNE ISVAREND	; Branch always
+	BNE ISVAREND	; immer verzweigen
 VAR
-NEXTVAR	CLC		; Next variable
+NEXTVAR	CLC		; nächste Variable
 	LDA STRDP
-	ADC #7		; Advance to next variable
+	ADC #7		; Variablenlänge
 	STA STRDP
 	BCC ISVAREND
-	INC STRDP+1	; Overflow high byte
+	INC STRDP+1	; Überlauf High-Byte
 ISVAREND
 	CMP ARYTAB
 	BNE CHECKVAR
-	LDX STRDP+1	; Variable end (=array start)?
+	LDX STRDP+1	; Var.-Ende (=Array-Anfang)?
 	CPX ARYTAB+1
-	BEQ ARRAYS	; Variable end reached, proceed with arrays
+	BEQ ARRAYS	; Var.-Ende, weiter mit Arrays
 CHECKVAR
-	LDY #0		; Variable name
-	LDA (STRDP),Y	; 1st character, type in bit 7 
-	BMI NEXTVAR	; No string, to next variable
+	LDY #0		; Variablenname
+	LDA (STRDP),Y	; 1. Zeichen, Typ in Bit 7 
+	BMI NEXTVAR	; kein String, nächste V.
 	INY
-	LDA (STRDP),Y	; 2nd character, type in bit 7
-	BPL NEXTVAR	; No string, to next variable
+	LDA (STRDP),Y	; 2. Zeichen, Typ in Bit 7
+	BPL NEXTVAR	; kein String, nächste V.
 	INY
-	LDA (STRDP),Y	; String length
-	BEQ NEXTVAR	; = 0, to next variable
+	LDA (STRDP),Y	; String-Länge
+	BEQ NEXTVAR	; = 0, nächste Variable
 	BNE RETGETSA
 
 CHECKTYPE
-	LDA STAT	; GETSA intro with C=0
-	CMP #STAT_ARY	; String status?
-	BEQ ARRAY	; =1 -> arrays
-	BCS VAR		; =4 -> variables
-	JMP DSTACK	; =0 -> SDS
+	LDA STAT	; GETSA-Einstieg mit C=0
+	CMP #STAT_ARY	; String-Status?
+	BEQ ARRAY	; =1 -> Arrays
+	BCS VAR		; =3 -> Variablen
+	JMP DSTACK	; =5 -> String-Desc.-Stack
 
-; *** Look up arrays: ARYTAB to STREND
+; *** Suche in Arrays: ARYTAB bis STREND
 
-ARRAYS	STA PTR		; A/X set from simple variable processing,
-	STX PTR+1	; pointing the start of arrays.
+ARRAYS	STA PTR		; A/X von Variablendurchlauf
+	STX PTR+1	; Start Array-Array-Bereich
 	LDY #STAT_ARY
-	STY STAT	; Set status to arrays
+	STY STAT	; Status: Arrays
 ISARREND
 	LDA PTR
 	LDX PTR+1
-CHKAEND	CPX STREND+1	; End of array area?
-        BNE NEXTARR
-	CMP STREND	; High byte matches, low byte is
-			; less or equal.
-	BEQ NOSTRING	; Arrays finished -> no string
+CHKAEND	CPX STREND+1	; Ende des Array-Bereichs
+        BNE NEXTARR	; erreicht?
+	CMP STREND	; High-Byte gleich, nur kleiner
+			; oder gleich möglich!
+	BEQ NOSTRING	; Arrays fertig -> kein String
 NEXTARR
-			; Carry always cleared because of CPX/CMP
-	STA STRDP	; Start of an array
+			; immer C=0, wegen CPX/CMP
+	STA STRDP	; Start eines Arrays
 	STX STRDP+1
 	LDY #0
-	LDA (STRDP),Y	; Array name
-	TAX		; Array type, keep it for later
+	LDA (STRDP),Y	; Array-Name
+	TAX		; Array-Typ merken
 	INY
 	LDA (STRDP),Y
-	PHP		; Array type 2nd part, keep also
+	PHP		; Array-Typ Teil 2 merken
 	INY
-	LDA (STRDP),Y	; Offset to next array
-	ADC PTR		; C-flag is cleared (because of CMP/CPX above)
-	STA PTR		; Save start of following array
+	LDA (STRDP),Y	; Offset nächstes Array
+	ADC PTR		; C-Flag ist bereits 0 (wegen CMP/CPX oben)
+	STA PTR		; Start des Folge-Arrays
 	INY
 	LDA (STRDP),Y
 	ADC PTR+1
 	STA PTR+1
-	PLP		; Fetch array type
-	BPL ISARREND	; Not a string array
-	TXA		; Fetch array type 2nd part
-	BMI ISARREND	; Not string array
+	PLP		; Array-Typ holen
+	BPL ISARREND	; kein String-Array
+	TXA		; Array-Typ Teil 2 holen
+	BMI ISARREND	; kein String-Array
 	INY
-	LDA (STRDP),Y	; Number of dimensions
+	LDA (STRDP),Y	; Anzahl der Dimensionen
 	ASL		; *2
-	ADC #5		; Offset = dimensions*2+5
-			; C=0 as long as dim.. <= 125
-	BNE ADVDESC	; Branch always
-ARRAY			; Entry on continuation
+	ADC #5		; Offset = Dimensionen*2+5
+			; C=0 solange Dim.. <= 125
+	BNE ADVDESC	; immer verzweigen
+ARRAY			; Einstieg bei Fortsetzung
 NEXTASTR
 	CLC
-	LDA #3		; String descriptor length
-ADVDESC	ADC STRDP	; Advance to next string
+	LDA #3		; String-Descriptor-Länge
+ADVDESC	ADC STRDP	; zum nächsten String
 	STA STRDP
 	BCC +
-	INC STRDP+1	; Overflow high byte
-+	CMP PTR		; All array elements processed?
+	INC STRDP+1	; Überlauf High-Byte
++	CMP PTR		; Alle Array-Elemente durch?
 	BNE IS0ASTR
 	LDX STRDP+1
 	CPX PTR+1
-	BEQ CHKAEND	; A/X = PTR, check for end of  array area
+	BEQ CHKAEND	; A/X = PTR, Array-Bereichsende prüfen
 IS0ASTR
 	LDY #0
-	LDA (STRDP),Y	; String length
-	BEQ NEXTASTR	; Next array element
+	LDA (STRDP),Y	; String-Länge
+	BEQ NEXTASTR	; weiter im Array
 RETGETSA
-	STA LEN		; Return value: length
+	STA LEN		; Rückgabevariable
 	INY
-	LDA (STRDP),Y	; String address low
+	LDA (STRDP),Y	; String-Adresse low
 	TAX
 	INY
-	LDA (STRDP),Y	; String address high
-	TAY		; Always not zero, Z=0
-	RTS		; Return address in X/Y
+	LDA (STRDP),Y	; String-Adresse high
+	TAY		; immer ungleich 0, Z=0
+	RTS		; Adresse in X/Y retour
 NOSTRING
-	LDA #0		; Length 0 
-	STA LEN		; No string found
+	LDA #0		; Länge 0 
+	STA LEN		; kein String gefunden
 	RTS		; Z=1
 
 
 
 
 !ifndef no_indicator {
-ORIGVID !byte 0		; Original character of marker position
-ORIGCOL !byte 0		; Original color of marker position
+ORIGVID !byte 0		; originales Zeichen an der Markenposition
+ORIGCOL !byte 0		; originale Farbe an der Markenposition
 }
 
 
