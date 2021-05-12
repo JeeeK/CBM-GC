@@ -3,7 +3,7 @@
 ; *  BACKLINK GARBAGE  COLLECTION  *
 ; *        from Johann Klasek      *
 ; *        j AT klasek DOT at      *
-; *       2021-03-30 VERS. 1.0     *
+; *       2021-03-30 VERS. 1.1     *
 ; **********************************
 ;
 ; Collects unused (garbage) strings on the string heap,
@@ -341,8 +341,8 @@ STAGE1
         SEC             ; Initialize search
 NEXTSTR
 	JSR GETSA
-        BEQ STAGE2      ; No String found anymore
-                        ; Address in X/Y
+	BEQ STAGE2      ; No String found anymore
+			; Address in X/Y, descr. at STRDP + STAT-offset
 
 	CPY FRETOP+1	; String on heap?
 	BCC NEXTSTR	; No, C=0 for GETSA continuation
@@ -371,6 +371,9 @@ NEXTSTR
 	INY		; Position string address low byte
 	TXA		; String value
 	STA (STRDP),Y	; Store value in descriptor (low address byte)
+	LDA #0		; Mark for high byte, means on heap string
+	INY		; String address high byte
+	STA (STRDP),Y	; Set to zero
 	CLC		; Continuation mode for GETSA
 	BCC NEXTSTR	; Always
 
@@ -550,13 +553,14 @@ STAGE3
 NEXT1STR
 	CLC
 	JSR GETSA
-        BEQ EXIT        ; No String found anymore
-                        ; Address in X/Y, descr. at STRDP
+	BEQ EXIT        ; No String found anymore
+			; Address in X/Y, descr. at STRDP + STAT-offset
 	DEC LEN
 	BNE NEXT1STR	; Loop if not length 1
-	
+	TYA		; Check string address high byte
+	BNE NEXT1STR	; If not zero, string is not on heap!
+			; Y is always 0.	
 	TXA		; String addr low is the string byte!
-	LDY #0
 	LDX HEAP
 	BNE +		; Heap pointer - 1
 	DEC HEAP+1
@@ -652,7 +656,7 @@ ISDSTEND
 	TAY
 	LDA 1,X		; String address low
 	TAX
-	TYA		; Always not zero, Z=0
+	LDA LEN		; Always not zero, Z=0
 	RTS		; Returns address in X/Y
 
 ; *** Look up simple variables: VARTAB to ARYTAB
@@ -762,7 +766,8 @@ RETGETSA
 	TAX
 	INY
 	LDA (STRDP),Y	; String address high
-	TAY		; Always not zero, Z=0
+	TAY
+	LDA LEN		; Always not zero, Z=0
 	RTS		; Return address in X/Y
 NOSTRING
 	LDA #0		; Length 0 
