@@ -250,7 +250,10 @@ LEAVE	RTS
 ; -> 
 
 ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
-;
+
+; Only both or none of the arguments are the SDS. If the 2nd (later pushed)
+; element has been poped, the first argument will be on the SDS also.
+
 HANDLE2
 	JSR $B68C	; Copy string to utility pointer's location
 	LDA $50		; Descriptor address of 2nd argument
@@ -259,10 +262,10 @@ HANDLE2
 	BNE LEAVE
 	CPY $18		; High byte (normally 0)
 	BNE LEAVE
-	JSR FREESDS	; mark already remove element from SDS as free
-	LDA $6F
+	JSR FREESDS	; Mark already remove element from SDS as free
+	LDA $6F		; Descriptor address of the first argument
 	LDY $70
-	JMP POPSDS	; remove element from SDS and mark as free
+	JMP POPSDS	; Remove element from SDS and mark as free
 	
 
 ; LEFT$(), RIGHT$(), MID$(): Free input string
@@ -288,9 +291,10 @@ POPSDS
 	CMP $17
 	BNE LEAVE	; RTS
 	; free memory and pull from SDS
-	JSR FREESDS
+	JSR FREESDS	; Carry = 1 CMP above, left untouched after JSR
 	LDA $17		; Top elememt on SDS
-	JMP $B6E3	; remove from SDS (A low byte to SDS element)
+	JMP $B6E3	; Remove from SDS (A has low byte to SDS element)
+			; Carry flag must be set on entry.
 FREESDS
 	; A/Y is pointer to string descriptor on the SDS!
 	TAX		; Index in zero-page
