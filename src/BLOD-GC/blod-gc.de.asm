@@ -51,10 +51,10 @@ NEWHEAP  = $22		; Neuer Heap-Pointer (Stage 2)
 
 STAT     = $57		; String-Status, Werte siehe
 			; STAT_* weiter unten (GETSA in/out).
-DESC     = $58		; String-Address (temp.)
-STR      = $5A		; Points to a string
-LEN      = $5D		; String length (GETSA out)
-PTR      = $5F		; Array pointer (GETSA in/out)
+DESC     = $58		; String-Adresse (temp.)
+STR      = $5A		; Zeigt auf einen String
+LEN      = $5D		; String-Länge (GETSA out)
+PTR      = $5F		; Array-Zeiger (GETSA in/out)
 
 
 ; Konstanten
@@ -165,70 +165,70 @@ CPYROM	LDA (CPTR),Y	; ROM lesen
 ;	STA ($49),Y
 
 HANDLE1
-	CPY $18		; Descriptor on top of SDS?
+	CPY $18		; Descriptor auf SDS-Top?
 	BNE +
 	CMP $17
 	BNE +
-	STA $16		; Yes, remove it from SDS
+	STA $16		; Ja, dann vom SDS entfernen
 	SBC #3
 	STA $17
 	
-	; If destination variable points to string on the heap, free it.
+	; Wenn die Zielvariable auf einen String am Heap zeigt, dann freigeben.
 
 +	LDY #0
-	; $49 points to variable descriptor (in LET's destination variable)
-	LDA ($49),Y	; Get string length
-	BEQ LEAVE	; Variable contains no string
-	TAX		; > 0, save it for later
+	; $49 zeigt auf den Variablen-Descriptor (in der LET-Zielvariable)
+	LDA ($49),Y	; String-Länge
+	BEQ LEAVE	; Variable enthält keinen String-Wert
+	TAX		; > 0, für später speichern
 	INY
-	LDA ($49),Y	; String address low
+	LDA ($49),Y	; Stringadresse Low-Byte
 	STA STR
 	INY
-	LDA ($49),Y	; String address high
+	LDA ($49),Y	; Stringadresse High-Byte
 	STA STR+1
 
-	; Free STR if on heap and return
+	; STR freigeben, wenn am Heap und zurück
 
 FREE
-	LDA STR+1	; String address high
-	CMP FRETOP+1	; Heap top high
-	BCC LEAVE	; String below heap (on on heap)
-	BNE ++		; String on heap
-	LDA STR		; String address low
-	CMP FRETOP	; Heap top low
-	BCC LEAVE	; Leave when not on heap!
+	LDA STR+1	; Stringadress High-Byte
+	CMP FRETOP+1	; Heap-Top High-Byte
+	BCC LEAVE	; String unterhalb des Heaps
+	BNE ++		; String könnte am Heap sein
+	LDA STR		; Stringadresse Low-Byte
+	CMP FRETOP	; Heap-Top Low-Byte
+	BCC LEAVE	; Nicht am Heap!
 
-	LDA STR+1	; String address greater or equal FRETOP
+	LDA STR+1	; Stringadresse über oder gleich FRETOP
 
-++	CMP MEMEND+1	; String above string memory?
-	BCC +++		; no
-	BNE LEAVE	; yes
-	LDA STR		; High byte equal, compare low byte
+++	CMP MEMEND+1	; String oberhalb Sring-Speicher?
+	BCC +++		; Nein
+	BNE LEAVE	; Ja
+	LDA STR		; High-Byte gleich, Low-Byte vergleichen
 	CMP MEMEND
-	BCS LEAVE	; Above heap
+	BCS LEAVE	; Oberhalb, also nicht am Heap
 	
-	; String on heap: mark it as free
+	; String am Heap: als frei markieren
 
-+++	TXA		; Restore length
-	CMP #1		; String of length 1?
++++	TXA		; Länge wiederherstellen
+	CMP #1		; String-Länge 1?
 	BNE ++
 
 	LDY #0
-	STA (STR),Y	; Single byte on heap contains 1
-	BEQ LEAVE	; leave, always (Z=1)
+	STA (STR),Y	; Einzelnes Byte am Heap enthält nur 1
+	BEQ LEAVE	; Immer (Z=1)
 
-++	TAY		; Length to Y (> 1!)
+++	TAY		; Länge nach Y (> 1!)
 	DEY
-	DEY		; Y: Length - 2
-	STA (STR),Y	; Pre-last byte of string has length
+	DEY		; Y: Länge - 2
+	STA (STR),Y	; Vorletztes Byte des Strings enthält die Länge
 	INY
 	LDA #$FF
-	STA (STR),Y	; Last byte of string with gap-marker
+	STA (STR),Y	; Letztes Byte des Strings mit Lückenmarkierung
 LEAVE	RTS
 
 
 
-; String concatenation: free 2nd argument after copying!
+; String-Addition: Zweites Argument nach dem Kopieren!
 
 ;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space A bytes long
 ;.,B660 20 7A B6 JSR $B67A       copy string from descriptor to utility pointer
@@ -250,22 +250,25 @@ LEAVE	RTS
 ; -> 
 
 ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
-;
+
+; Entweder beide Argumente oder keines sind auf dem SDS. Wenn das zweite Argument
+; (das später auf dem SDS gelangte) am SDS ist, dann ist das erste auch dort.
+
 HANDLE2
-	JSR $B68C	; Copy string to utility pointer's location
-	LDA $50		; Descriptor address of 2nd argument
-	LDY $51		; It is never top on heap, so just mark it as free
-	CMP $16		; Previously popped element
+	JSR $B68C	; Kopiere String zur Hilfszeigerposition
+	LDA $50		; Descriptor-Adresse des zweiten Arguments
+	LDY $51		; Kann nicht mehr am Heap sein, also als frei markieren,
+	CMP $16		; wenn es das zuvor entfernte Element war
 	BNE LEAVE
-	CPY $18		; High byte (normally 0)
+	CPY $18		; High-Byte (immer 0)
 	BNE LEAVE
-	JSR FREESDS	; mark already remove element from SDS as free
-	LDA $6F
+	JSR FREESDS	; Das bereits am SDS entfernte Element als frei markieren
+	LDA $6F		; Descriptor-Adresse des ersten Arguments
 	LDY $70
-	JMP POPSDS	; remove element from SDS and mark as free
+	JMP POPSDS	; Elemente entfernen und als frei markieren
 	
 
-; LEFT$(), RIGHT$(), MID$(): Free input string
+; LEFT$(), RIGHT$(), MID$(): Eingabe-String freigeben
 
 ;.,B726 20 8C B6 JSR $B68C       store string from pointer to utility pointer
 ;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put string address
@@ -273,35 +276,36 @@ HANDLE2
 ; -> 
 ;.,B726 20 8C B6 JSR HANDLE3     store string from pointer to utility pointer
 
-
 HANDLE3
-	; A: length, copy from ($22) to ($35)
-	JSR $B68C	; Copy string part into allocated space
+	; A: Länge, kopiere von ($22) nach ($35)
+	JSR $B68C	; Kopiert den String-Teil in den angeforderten Neubereich
 	LDA $50
 	LDY $51
 
-	; the string itself is not top of heap, just mark as free and remove from SDS
+	; Der String selbst ist nicht Top-of-heap, nur als frei markieren und vom
+	; SDS entfernen.
 
 POPSDS
-	CPY $18		; Descriptor on top of SDS?
+	CPY $18		; Descriptor zuoberst auf SDS?
 	BNE LEAVE	; RTS
 	CMP $17
 	BNE LEAVE	; RTS
-	; free memory and pull from SDS
-	JSR FREESDS
-	LDA $17		; Top elememt on SDS
-	JMP $B6E3	; remove from SDS (A low byte to SDS element)
+	; Speicher als frei markieren und vom SDS entfernen
+	JSR FREESDS	; C=1 von CMP zuvor, im Aufruf nicht verändert
+	LDA $17		; Zuoberstes Element on SDS
+	JMP $B6E3	; Vom SDS entfernen (A Low-Byte des SDS-Elements)
+			; Muss beim Eintritt C=1 haben
 FREESDS
-	; A/Y is pointer to string descriptor on the SDS!
-	TAX		; Index in zero-page
-	LDA 1,X		; String address low
+	; A/Y ist Zeiger auf String-Descriptor am SDS!
+	TAX		; Index in der Zero-Page
+	LDA 1,X		; String-Adresse Low-Byte
 	STA STR
-	LDA 2,X		; String address high
+	LDA 2,X		; String-Adresse High-Byte
 	STA STR+1
-	LDA 0,X		; String length
+	LDA 0,X		; String-Länge
 	TAX
-	BNE FREE	; Length X, address STR/STR+1
-	RTS		; No free if length = 0!
+	BNE FREE	; Länge in X, Adresse in STR/STR+1
+	RTS		; Kein Freigeben, wenn Länge 0!
 
 
 
@@ -335,95 +339,95 @@ COLLECT
 
 
 
-; walk through all strings and reorganize them
+; Gehe über alle String und reorganisiere sie
 
 STAGE1
-        SEC             ; Initialize search
+        SEC             ; Suche von Beginn an
 NEXTSTR
 	JSR GETSA
-	BEQ STAGE2      ; No String found anymore
+	BEQ STAGE2      ; Kein String mehr gefunden
 			; Adresse in X/Y, Descr. STRDP mit Offset von STAT
 
-	CPY FRETOP+1	; String on heap?
-	BCC NEXTSTR	; No, C=0 for GETSA continuation
+	CPY FRETOP+1	; String am Heap?
+	BCC NEXTSTR	; Nein, C=0 für GETSA-Fortsetzung
 	BNE +
 	CPX FRETOP
-	BCC NEXTSTR	; No, C=0 for GETSA continuation
+	BCC NEXTSTR	; Nein, C=0 für GETSA-Fortsetzung
 
-+	STX STR		; Start of string which is on heap
++	STX STR		; String-Start, der am Heap liegt
 	STY STR+1
 	LDA LEN
-	CMP #1		; String length 1?
+	CMP #1		; String-Länge 1?
 	BNE ++
 
 	; LEN 1: 
-	;	copy string value into descriptor
-	;	overwrite string on heap with value 1
+	;	Kopiert den String-Wert in den Descriptor.
+	;	Überschreibt den String am Heap mit dem Wert 1.
 
 	LDY #0
-	LDA (STR),Y	; String value
+	LDA (STR),Y	; String-Inhalt/Wert
 	TAX
-	LDA #1		; Marker for string with length 1
-	STA (STR),Y	; Store marker on heap
+	LDA #1		; Markierung für String mit Länge 1
+	STA (STR),Y	; Markierung am Heap speichern
 	LDA STAT
-	LSR		; Shift right gives offset, which
-	TAY		; refers to STRDP leading to the descriptor
-	INY		; Position string address low byte
-	TXA		; String value
-	STA (STRDP),Y	; Store value in descriptor (low address byte)
+	LSR		; Rechtsschieben ergibt Offset, welcher sich auf
+	TAY		; auf STRDP bezieht und zum Descriptor positioniert
+	INY		; String-Position Adresse Low-Byte
+	TXA		; String-Wert
+	STA (STRDP),Y	; Wert in den Descriptor speichern (Adresse Low-Byte)
 	LDA #0		; 0-Byte Markierung,
 	INY		; für Strings, die am Heap liegen.
-	STA (STRDP),Y	; Stringadresse High-Byte
-	CLC		; Continuation mode for GETSA
-	BCC NEXTSTR	; Always
+	STA (STRDP),Y	; String-Adresse High-Byte
+	CLC		; Fortsetzungsmodus für GETSA
+	BCC NEXTSTR	; Immer
 
 	; LEN >1:
-	;	copy backlink bytes to descriptor
-	;	store descriptor pointer to backlink
+	;	Kopiere Back-link-Bytes in den Descriptor,
+	;	speichere Descriptor-Zeiger als Back-link
 
-++	TAY		; Length
-	DEY		; Index to last byte
+++	TAY		; Länge
+	DEY		; Index auf letztes Byte
 	LDA (STR),Y
-	PHA		; Last byte of string
+	PHA		; Letztes Byte des Strings
 	LDX STRDP+1
 	LDA STAT
-	LSR		; Shift right gives offset to the descriptor
+	LSR		; Rechtsschieben ergbit Offset auf den Descriptor
 	CLC
 	ADC STRDP
 	BCC +
 	INX
-+	PHA		; STRDP + offset low
-	TXA		; X STRDP + offset high
-	STA (STR),Y	; Back-link high
++	PHA		; STRDP + Offset Low-Byte
+	TXA		; X STRDP + Offset High-Byte
+	STA (STR),Y	; Back-link High-Byte
 	DEY
-	LDA (STR),Y	; Pre-last byte string
+	LDA (STR),Y	; Vorletztes Byte im String
 	TAX
-	PLA		; STRDP + offset low
-	STA (STR),Y	; Back-link low
+	PLA		; STRDP + Offset Low-Byte
+	STA (STR),Y	; Back-link Low-Byte
 	LDA STAT
-	LSR		; Shift right gives offset, which
-	TAY		; refers to STRDP leading to the descriptor
-	INY		; Skip length byte
-	PLA		; Last byte of string
-	STA (STRDP),Y	; Store into descriptor address low byte
-	TXA		; Pre-last byte of string
+	LSR		; Rechtsschieben ergibt Offset, welcher sich auf
+	TAY		; STRDP bezieht und auf den Descriptor positioniert
+	INY		; Längen-Byte übergehen
+	PLA		; Letztes Byte des Strings
+	STA (STRDP),Y	; In den Descriptor Adressse Low-Byte speichern
+	TXA		; Vorletztes Byte im String
 	INY		; =2
-	STA (STRDP),Y	; Store into descriptor address high byte
-	CLC		; Continuation mode for GETSA
-	BCC NEXTSTR	; Always
+	STA (STRDP),Y	; In den Descriptor Adresse High-Byte speichern
+	CLC		; Forsetzungsmodus for GETSA
+	BCC NEXTSTR	; Immer
 	
 
 
 
-; walk through heap, remove gaps and move strings
+; Gehe durch den Heap, entferne die Lücken und verschiebe die Strings
 
 STAGE2
-	LDY MEMEND+1	; Top of memory.
-	LDX MEMEND	; Set new heap top
-	STX NEWHEAP	; to memory end.
+	LDY MEMEND+1	; Ende des String-Speichers
+	LDX MEMEND	; ist neuer Heap-Anfang.
+	STX NEWHEAP
 	STY NEWHEAP+1
-			; Entry point from no-gap part
-LOOP2R	STY PTR+1	; PTR comes from X
+			; Einstiegspunkt vom Keine-Lücke-Teil
+LOOP2R	STY PTR+1	; PTR is in X
 	LDY #0
 LOOP2
 	TXA		; PTR minus 1
@@ -432,155 +436,156 @@ LOOP2
 +	DEX
 -	STX PTR
 
-	CPX HEAP	; PTR blow top of heap?
+	CPX HEAP	; PTR unterhalb des Heaps?
 	LDA PTR+1
 	SBC HEAP+1
 	BCS +		; PTR >= HEAP
 	JMP EXIT2
 +
-	LDA (PTR),Y	; Get back-link high
-	CMP #1		; 1-byte gap
-	BEQ LOOP2	; Skip it, covered later in stage 3.
+	LDA (PTR),Y	; Hole Back-link High-Byte
+	CMP #1		; 1-Byte-Lücke
+	BEQ LOOP2	; überspringen, wird in Stage 3 behandelt
 
-	INX		; Decrement PTR, but leaving A untouched
-	DEX		; PTR low = 0?
+	INX		; PTR dekrementieren, aber A unberührt lassen
+	DEX		; PTR Low-Byte = 0?
 	BNE +
 	DEC PTR+1
-+	DEX		; PTR low
++	DEX		; PTR Low-Byte
 	STX PTR
 
-	CMP #$FF	; Gap marker? (length >1)
+	CMP #$FF	; Lückenmarkierung? (Länge >1)
 	BNE NOGAP
-			; Skip gap of a certain length ...
-	LDA (PTR),Y	; Gap length
+			; Lücke einer bestimmten Länge übergehen ...
+	LDA (PTR),Y	; Lückenlänge
 	EOR #$FF	; A is > 1
-			; Carry set from CMP above!
-	ADC #1		; Two's complement +1 and +1, -(LEN-1) + PTR -> PTR
-			; Never 0 because gap length > 1
-	ADC PTR		; C=0 always because -(LEN-1) could never exceed $FF
-	TAX		; PTR low byte
-	BCS -		; Position on last string byte
-	DEC PTR+1	; PTR high byte, always >0
-	BNE -		; Always, PTR has string address,
-			; pointing to last string byte
+			; Carry-Flag von CMP oben gesetzt!
+	ADC #1		; Zweierkomplement +1 und +1, -(LEN-1) + PTR -> PTR
+			; wird nie 0 weil Lückenlänge > 1
+	ADC PTR		; C=0 immer, weil -(LEN-1) nie $FF überschreiten kann
+	TAX		; PTR Low-Byte
+	BCS -		; Position letztes String-Byte
+	DEC PTR+1	; PTR High-Byte, immer >0
+	BNE -		; Immer, PTR hat String-Adresse, die auf
+			; das letzte String-Byte zeigt
 
-; We have a backlink to the string:
-NOGAP	STA DESC+1	; Backlink high and
-	LDA (PTR),Y	; backlink low is the
-	STA DESC	; descriptor address.
+	; Wir haben einen Back-link auf den String:
+NOGAP	STA DESC+1	; Back-link High-Byte und
+	LDA (PTR),Y	; Back-link Low-Byte ist die
+	STA DESC	; Descriptor-Adresse.
 
-	LDA (DESC),Y	; Length from descriptor
+	LDA (DESC),Y	; Länge aus dem ~escriptor
 	EOR #$FF
-	PHA		; Needed for heap later
-	LDX PTR+1	; Transfer to STR ...
-			; Carry clear from CMP #$FF
+	PHA		; Später für den Heap gebraucht
+	LDX PTR+1	; Transfer zu STR ...
+			; Carry-Flag gelöscht vom CMP #$FF!
 	ADC #3		; -(LEN-2) + PTR -> PTR
-	BNE +		; PTR already in position
-			; Special case length = 2:
-	INX		; compensate for the high byte decrement
-	CLC		; Adding 0 with carry cleared, leaves PTR unchanged.
-+	ADC PTR		; Accumulator before add. was in range 0 to FC
-			; which never sets the carry!
+	BNE +		; PTR bereits auf Position
+			; Spezialfall Länge = 2:
+	INX		; Kompensiere das High-Byte-Dekrement
+	CLC		; Addiere 0 mit Carry-Fläg gelöscht, PTR bleibt unverändert
++	ADC PTR		; Akku war vorher im Bereich von 0 bis FC
+			; was nie das Carry setzen kann!
 	BCS +
-	DEX		; In case of adding 0 X is already compensated.
-+	STX STR+1	; STR points to string start.
+	DEX		; Im Fall des Addierens von 0 ist X bereits kompensiert
++	STX STR+1	; STR zeigt auf String-Start
 	STA STR
 	
-	; make space on heap vor LEN bytes
-	PLA		; LEN, but only complemented
-	SEC		; Finalize two's complement (+1 from carry)
+	; Am Heap LEN Bytes reservieren
+	PLA		; LEN, aber bereits komplementiert
+	SEC		; Finalisiere das Zweierkomplement (+1 vom Carry-Flag)
 	ADC NEWHEAP	; HEAP - LEN -> HEAP
 	STA NEWHEAP
 	BCS +
 	DEC NEWHEAP+1
 +	
-	; copy LEN bytes from STR to HEAP
-	LDA (DESC),Y	; length from descriptor
-	TAY		; as index
+	; Kopiere LEN Bytes von STR zu HEAP
+	LDA (DESC),Y	; Länge aus dem Descriptor
+	TAY		; als Index
 	DEY		; index = length - 2
 	DEY
-	BEQ +		; 0, nothing to copy
-	DEY		; -1, index of last byte
-	BEQ ++		; No loop if index is 0.
--	LDA (STR),Y	; Transfer byte 1 to len-1
+	BEQ +		; 0, nichts zu kopieren
+	DEY		; -1, Index auf das letzte Byte
+	BEQ ++		; Keine Iteration, wenn Index 0 ist.
+-	LDA (STR),Y	; Transferiere Byte 1 bis len-1
 	STA (NEWHEAP),Y
 	DEY
 	BNE -
-++	LDA (STR),Y	; transfer byte 0
+++	LDA (STR),Y	; Transfereriere Byte 0
 	STA (NEWHEAP),Y
 +	
-	; correct descriptor
-	LDY #2		; Offset in descriptor
-	LDA (DESC),Y	; pre-last string byte 
-	PHA		; Save
+	; Descriptor korrigieren
+	LDY #2		; Offset im Descriptor
+	LDA (DESC),Y	; Vorletztes String-Byte
+	PHA		; Zwischenspeichern
 	LDA NEWHEAP+1
-	STA (DESC),Y	; Restore string address low
+	STA (DESC),Y	; String-Adresse Low-Byte setzen
 	DEY
-	LDA (DESC),Y	; last string byte
-	PHA		; Save
-	LDA NEWHEAP	; Restore string address high
-	STA (DESC),Y	; Backlink high
+	LDA (DESC),Y	; Letztes String-Byte
+	PHA		; Für später retten
+	LDA NEWHEAP	; String-Adresse High-Byte wiederherstellen
+	STA (DESC),Y	; Back-link High-Byte
 
 	DEY		; Y=0
-	; Restore string bytes to backlink
-	LDA (DESC),Y	; Length byte
+	; Wiederherstellung der String-Bytes im Back-link
+	LDA (DESC),Y	; Längen-Byte
 	TAY
-	DEY		; Index of last string byte
+	DEY		; Index auf letztes String-Byte
 	PLA
-	STA (NEWHEAP),Y	; last byte
+	STA (NEWHEAP),Y	; Letztes Byte
 	DEY
 	PLA		
-	STA (NEWHEAP),Y	; pre-last byte
+	STA (NEWHEAP),Y	; Vorletztes Byte
 
-	LDX STR		; PTR low byte in X
-	LDY STR+1	; always >0
-	JMP LOOP2R	; Loop with set PTR and reset Y
+	LDX STR		; PTR Low-Byte nach X
+	LDY STR+1	; Immer >0
+	JMP LOOP2R	; Wiederholen mit Setzen von PTR und Setzen von Y=0
 	
 EXIT2
-	LDA NEWHEAP	; Set rebuilt, compacted heap
-	STA HEAP	; as new heap.
+	LDA NEWHEAP	; Der neue, kompaktierte Heap
+	STA HEAP	; nun als neuen Heap setzen
 	LDA NEWHEAP+1
 	STA HEAP+1
 
 
 
 
-; Put strings with length 1 (stored in the descriptor) back on heap
+; Alle Strings des Heaps mit Länge wieder zurück auf den Heap
+; kopieren. Diese haben eine spezielle Markierung im Descriptor.
 
 STAGE3
-        SEC             ; Initialize search for GETSA
-        !byte $24       ; BIT ZP, skip next instruction
+        SEC             ; Suche mittels GETSA von Beginn an
+        !byte $24       ; BIT ZP, nächste Instruktion übergehen
 NEXT1STR
-	CLC
+	CLC		; GETSA an letzter Position fortsetzen
 	JSR GETSA
-	BEQ EXIT        ; No String found anymore
+	BEQ EXIT        ; Alle Strings durch
 			; Adresse in X/Y, Descr. STRDP mit Offset von STAT
 	DEC LEN
-	BNE NEXT1STR	; Loop if not length 1
+	BNE NEXT1STR	; Nächster Durchlauf, wenn Länge nicht 1
 	TYA		; High-Byte Stringadresse nicht 0 -> nicht am Heap
 	BNE NEXT1STR
 			; Y ist bereits 0
-	TXA		; String addr low is the string byte!
+	TXA		; String-Adr. Low-Byte ist das String-Byte!
 	LDX HEAP
-	BNE +		; Heap pointer - 1
+	BNE +		; Heap-Zeiger - 1
 	DEC HEAP+1
-+	DEX		; Low byte used later
++	DEX		; Low-Byte verwendet später
 	STX HEAP
-	STA (HEAP),Y	; stored string byte back to heap
+	STA (HEAP),Y	; String-Byte wieder am Heap speichern
 
 	LDA STAT
-	LSR		; Shift right gives offset, which
-	TAY		; refers to STRDP leading to the descriptor
-	INY		; Low byte address in descriptor
-	TXA		; Heap pointer low
-	STA (STRDP),Y	; stored back into descriptor
+	LSR		; Rechtsschieben ergibt Offset, welcher sich auf
+	TAY		; STRDP bezieht und auf den Descriptor positioniert
+	INY		; Low-Byte der Adresse im Descriptor
+	TXA		; Heap-Zeiger Low-Byte
+	STA (STRDP),Y	; wieder in den Descriptor speichern
 	INY
-	LDA HEAP+1	; Heap pointer high
-	STA (STRDP),Y	; stored back into descriptor
-	BNE NEXT1STR	; Branch always, because high byte >0
+	LDA HEAP+1	; Heap-Zeiger High-Byte
+	STA (STRDP),Y	; wieder in den Descriptor speichern
+	BNE NEXT1STR	; Immer, weil High-Byte >0
 	
 
-; *** Garbage collection finished
+; *** Garbage collection fertig
 
 EXIT
 

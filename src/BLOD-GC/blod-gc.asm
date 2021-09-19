@@ -276,7 +276,6 @@ HANDLE2
 ; -> 
 ;.,B726 20 8C B6 JSR HANDLE3     store string from pointer to utility pointer
 
-
 HANDLE3
 	; A: length, copy from ($22) to ($35)
 	JSR $B68C	; Copy string part into allocated space
@@ -292,7 +291,7 @@ POPSDS
 	BNE LEAVE	; RTS
 	; free memory and pull from SDS
 	JSR FREESDS	; Carry = 1 CMP above, left untouched after JSR
-	LDA $17		; Top elememt on SDS
+	LDA $17		; Top element on SDS
 	JMP $B6E3	; Remove from SDS (A has low byte to SDS element)
 			; Carry flag must be set on entry.
 FREESDS
@@ -436,7 +435,7 @@ LOOP2
 +	DEX
 -	STX PTR
 
-	CPX HEAP	; PTR blow top of heap?
+	CPX HEAP	; PTR below top of heap?
 	LDA PTR+1
 	SBC HEAP+1
 	BCS +		; PTR >= HEAP
@@ -549,13 +548,14 @@ EXIT2
 
 
 
-; Put strings with length 1 (stored in the descriptor) back on heap
+; Put strings (from the heap) with length 1 (stored in the descriptor) 
+; back on heap. These strings has been marked in a special way.
 
 STAGE3
         SEC             ; Initialize search for GETSA
         !byte $24       ; BIT ZP, skip next instruction
 NEXT1STR
-	CLC
+	CLC		; Continue GETSA from last position
 	JSR GETSA
 	BEQ EXIT        ; No String found anymore
 			; Address in X/Y, descr. at STRDP + STAT-offset
@@ -570,7 +570,7 @@ NEXT1STR
 	DEC HEAP+1
 +	DEX		; Low byte used later
 	STX HEAP
-	STA (HEAP),Y	; stored string byte back to heap
+	STA (HEAP),Y	; Stored string byte back to heap
 
 	LDA STAT
 	LSR		; Shift right gives offset, which
