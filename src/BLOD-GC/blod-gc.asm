@@ -230,21 +230,23 @@ LEAVE	RTS
 
 ; String concatenation: free 2nd argument after copying!
 
-;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space A bytes long
+;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space
+;                                A bytes long
 ;.,B660 20 7A B6 JSR $B67A       copy string from descriptor to utility pointer
 ;.,B663 A5 50    LDA $50         get descriptor pointer low byte
 ;.,B665 A4 51    LDY $51         get descriptor pointer high byte
-;.,B667 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of string space
-;                                returns with A = length, X = pointer low byte,
-;                                Y = pointer high byte
+;.,B667 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
+;                                string space returns with A = length, 
+;                                X = pointer low byte, Y = pointer high byte
 ;.,B66A 20 8C B6 JSR $B68C       store string from pointer to utility pointer
 ;.,B66D A5 6F    LDA $6F         get descriptor pointer low byte
 ;.,B66F A4 70    LDY $70         get descriptor pointer high byte
-;.,B671 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of string space
-;                                returns with A = length, X = pointer low byte,
-;                                Y = pointer high byte
-;.,B674 20 CA B4 JSR $B4CA       check space on descriptor stack then put string address
-;                                and length on descriptor stack and update stack pointers
+;.,B671 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
+;                                string space returns with A = length, 
+;                                X = pointer low byte, Y = pointer high byte
+;.,B674 20 CA B4 JSR $B4CA       check space on descriptor stack then put
+;                                string address and length on descriptor stack
+;                                and update stack pointers
 ;.,B677 4C B8 AD JMP $ADB8       continue evaluation
 
 ; -> 
@@ -271,8 +273,9 @@ HANDLE2
 ; LEFT$(), RIGHT$(), MID$(): Free input string
 
 ;.,B726 20 8C B6 JSR $B68C       store string from pointer to utility pointer
-;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put string address
-;                                and length on descriptor stack and update stack pointers
+;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put
+;                                string address and length on descriptor stack
+;                                and update stack pointers
 ; -> 
 ;.,B726 20 8C B6 JSR HANDLE3     store string from pointer to utility pointer
 
@@ -282,7 +285,8 @@ HANDLE3
 	LDA $50
 	LDY $51
 
-	; the string itself is not top of heap, just mark as free and remove from SDS
+	; the string itself is not top of heap, just mark as free
+	; and remove from SDS
 
 POPSDS
 	CPY $18		; Descriptor on top of SDS?
@@ -497,7 +501,8 @@ NOGAP	STA DESC+1	; Backlink high and
 	BCS +
 	DEC NEWHEAP+1
 +	
-	; copy LEN bytes from STR to HEAP
+	; copy LEN-2 bytes from STR to HEAP, the
+	; remaining bytes are restored from the descriptor later!
 	LDA (DESC),Y	; length from descriptor
 	TAY		; as index
 	DEY		; index = length - 2
