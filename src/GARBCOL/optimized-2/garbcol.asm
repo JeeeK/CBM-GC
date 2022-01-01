@@ -30,7 +30,7 @@
 ; Heap) gleich newptr (neuer Heap) ist. Solange diese
 ; der Fall ist, ist keine Kopieraktion (und auch
 ; keine Descriptor-Korrektur) notwendig.
-; In diesem Fall kann allerdings die Optimierung #2 nicht
+; In diesem Fall kann allerdings die Optimierung #3 nicht
 ; verwendet werden, da sonst die Backlink-Markierung
 ; nicht in allen Fällen passieren würde!
 ;
@@ -38,8 +38,6 @@
 ;	2013-11-15 Johann E. Klasek, johann at klasek at
 ; Optimiert:
 ;	2019-03-20 Johann E. Klasek, johann at klasek at
-; Überarbeitet:
-;	2021-04-11 Johann E. Klasek, johann at klasek at
 ;
 ; Bugfixes:
 ;
@@ -77,11 +75,19 @@
 ;
 ;	Aktivierbar via use_fast_copy-Variable.
 ;
-;    #2 Die Lückenmarkierung (Low-Byte mit der Länge) wird beim
-;	Kopieren des Strings mitgemacht. (-4 Byte Code, -5 T/String)
-;	Siehe no_opt_2-Abfrage bei Label cw3.
+;    #2 allocate etwas kompakter/schneller (-2 Byte Code, -3 T)
+;       Der Backlink wird via strptr/strptr+1 gesetzt, wobei
+;       bei einem String länger 253 Bytes das High-Byte in strptr+1
+;	erhöht wird, statt dies mit fretop+1 zu machen, welches
+;	dann restauriert werden muss.
+;       
+;	Aktivierbar via alternate_stralloc-Variable.
 ;
-;    #3 Kein String-Kopieren durchführen, solange der String-Heap
+;    #3 Die Lückenmarkierung (Low-Byte mit der Länge) wird beim
+;	Kopieren des Strings mitgemacht. (-4 Byte Code, -5 T/String)
+;	Siehe no_opt_3-Abfrage bei Label cw3.
+;
+;    #4 Kein String-Kopieren durchführen, solange der String-Heap
 ;	geordnet ist (also solange ptr = newptr ist). Sobald
 ;	eine Lücke eliminiert wurde, laufen ptr und newptr auseinander.
 ;
@@ -90,29 +96,22 @@
 ; aktiv
 !set use_fast_copy=1
 
-; Optimierung #2: Lückmarkierung teilweise mit String-Kopieren mitmachen.
+; Optimierung #2: etwas kürzere und schnellere stralloc-Routine
+; inaktiv
+;!set alternate_stralloc=1
+
+; Optimierung #3: Lückmarkierung teilweise mit String-Kopieren mitmachen.
 ; ist immer aktiv
 
-; Optimierung #3: Kein String-Kopieren, solange Heap geordnet ist.
+; Optimierung #4: Kein String-Kopieren, solange Heap geordnet ist.
 ; Wenn aktiv (passt aber nicht ins ROM!), dann darf nicht Optimierung #3
 ; aktiv sein!
 ; inaktiv
 ;!set opt_no_copy=1
-!ifdef startaddress {
-!set opt_no_copy=1
-}
 
 !ifdef opt_no_copy {
-!set no_opt_2=1
+!set no_opt_3=1
 }
-
-; Variante: Etwas kürzere und schnellere stralloc-Routine
-; Inaktiv, weil nicht verwendbar, da damit strptr nicht korrekt
-; ist und damit die "String concatenation" (String-Addition)
-; nicht funktionieren würde!
-;
-;!set alternate_stralloc=1
-
 
 
 ; Basic-Zeiger und -konstanten
@@ -129,7 +128,7 @@ vartab   = $2d		; Basicprogrammende = Variablenanfang
 arytab   = $2f		; Variablenende = Array-Bereichanfang
 strend   = $31		; Array-Bereichende = unterste String-Heap-Adresse 
 fretop   = $33		; aktuelle String-Heap-Adresse
-strptr	 = $35		; Hilfszeiger Stringzeiger (von stralloc)
+strptr	 = $35		; temporärer Stringzeiger
 memsiz   = $37		; höchste RAM-Adresse für Basic, Start
 			; des nach unten wachsenden String-Heaps
 ; Hilfsvariablen
@@ -140,18 +139,16 @@ desclen	 = $53		; akt. Länge eines Stringdescriptors
 aryptr	 = $58		; Array-Zeiger
 descptr	 = $5f		; Descriptor-Zeiger
 
-getspa   = $b4f4	; "get space" ROM-Eintrittspunkt
-garcoll  = $b526	; "garbage collect" ROM-Eintrittspunkt
+garcoll  = $b526
 
 ; Vorbelegung der Speicherplätze
 
-basic    = $A000	; BASIC-ROM-Startadresse
 romsize  = $2000	; ROM Länge 8K
 
 prozport = $01		; Prozessorport
-memrom   = %00110111	; Basic+Kernal ROM, $37
-membas   = %00110110	; Basic RAM+kernal ROM, $34
-memram   = %00110101	; Basic+Kernal RAM, $35
+memrom = %00110111	; Basic+Kernal ROM
+membas = %00110110	; Basic RAM+kernal ROM
+memram = %00110101	; Basic+Kernal RAM
 
 
 ; Datenstrukturen
@@ -181,10 +178,28 @@ memram   = %00110101	; Basic+Kernal RAM, $35
 
 
 
+!source "loader.asm"
+
+;
+; Patch-Liste für "loader"
+;
+
+patchlist:
+
+!wo part1_real,part1_real_end-part1_real,part1
+!wo part2_real,part2_real_end-part2_real,part2
+!wo part3_real,part3_real_end-part3_real,part3
+!wo part4_real,part4_real_end-part4_real,part4
+!wo 0  ; Endemarkierung
+
 
 ; ******************************* part 1 *************************************
 
-!macro part1_code .rom {
+part1_real:
+
+!pseudopc $b4f4 {
+
+part1:
 
 ;***** Speicher von String-Heap anfordern
 ;
@@ -200,12 +215,8 @@ memram   = %00110101	; Basic+Kernal RAM, $35
 ; der aktiven Strings setzen und kann die ungebrauchten
 ; Strings überspringen.
 
-!if .rom != 0 {			; ROM-Patch?
+
 basicerror = $b4d2		; Basic-Fehlermeldung
-} else {
-basicerror:
-	jmp $b4d2
-}
 
 allocate:
 	lsr collected		; Flag löschen
@@ -234,14 +245,11 @@ checkcollect
 	jsr docollect		; nein, dann Garbage Collection, C=1 (immer!)
 	ror collected		; Flag setzen (Bit 7) setzen
 	pla			; Länge angeforderter Bereich
-	jmp retry		; nochmal versuchen (Platz frei von GC?)
+	jmp retry		; nochmal versuchen (ob durch GC Platz frei wurde)
 
 alloc	jsr setfretop		; FRETOP = A/X
-!if .rom != 0 {			; ROM-Patch?
 	jmp stralloc		; zum 2. Teil: Allokation abschließen
-} else {
-	+part2_code		; 2. Teil gleich hier anhängen
-}
+
 
 ;***** garbage collection
 
@@ -265,7 +273,7 @@ sds:	lda #<sdsbase		; Startadr. String-Descriptor-Stack
 sdsnext	cmp sdsptr		; am 1. freien SDS-Element? (nur Low-Byte!)
 	beq vars		; Ja, SDS durch, weiter mit Variablen
 	jsr backlink		; sonst Backlink setzen
-	beq sdsnext		; immer, weil High-Byte 0; nächsten SDS-Descr.
+	beq sdsnext		; immer, weil High-Byte 0; nächsten SDS-Descriptor
 
 ; Backlink aller String-Variablen setzen
 
@@ -294,7 +302,7 @@ arrnext	cpx strend+1		; Array-Bereichende?
 	bne arrbl
 	cmp strend
 	beq cleanwalk
-arrbl	jsr backlinkarr		; Backlinks für nächstes Array setzen -> Z=0!
+arrbl	jsr backlinkarr		; Backlinks für nächstes String-Array setzen -> Z=0!
 	bne arrnext		; immer; nächstes Array-Element
 
 
@@ -368,7 +376,7 @@ cwactive			; immer mit Y=1 angesprungen
 cw3	lda #$ff		; Backlink h: als Lücke markieren
 	sta (newptr),y		; Y=1
 	dey			; Y=0
-!ifdef no_opt_2 {
+!ifdef no_opt_3 {
 	lda (descptr),y		; Descriptor: String-Länge
 	sta (newptr),y		; Backlink l: Lückenlänge
 } else {
@@ -390,7 +398,7 @@ cw4	lda ptr			; Alt-String-Zeiger -= String-Länge
 cw5
 	; An dieser Stelle wäre eine Optimierung möglich, um das
 	; Kopieren zu verhindern, wenn der String an der gleichen
-	; Stelle bleibt - dabei darf die Optimierung #2 nicht
+	; Stelle bleibt - dabei darf die Optimierung #3 nicht
 	; in Verwendung sein und es würden zusätzlich 10 Bytes gebraucht!
 !ifdef opt_no_copy {
 	cmp newptr		; ptr bereits in A
@@ -405,11 +413,11 @@ cw6
 !ifndef use_fast_copy {
 
 				; immer, da Länge >0
-!ifdef no_opt_2 {
+!ifdef no_opt_3 {
 	beq cwnocopy		; falls doch Länge 0, kein Kopieren,
 				; Descriptor trotzdem anpassen ...
 	tay			; als Index, mit Dekrementieren beginnen
-} else { ; mit Optimierung #2
+} else { ; mit Optimierung #3
 	tay			; Länge als Index
 	bne cwbllen		; immer, zuerst Backlink-Low-Markierung
 				; mit Lückenlänge belegen
@@ -424,10 +432,10 @@ cwbllen sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
 
 				; + 3 Byte, -2 T/Zeichen 
 	tay			; Länge als Index
-!ifdef no_opt_2 {
+!ifdef no_opt_3 {
 	bne cwentry		; immer, da Länge in Y>0, bei
 				; Dekrementieren beginnen!
-} else { ; mit Optimierung #2
+} else { ; mit Optimierung #3
 	bne cwbllen		; immer, zuerst Backlink-Low-Markierung
 				; mit Lückenlänge belegen
 }
@@ -531,55 +539,26 @@ backlinkvar:
 	bmi backlink		; Backlink setzen
 	bpl blnext		; keine String-Var., nächste Variable
 
-}	; macro part1_code ende
+}
+part1_real_end
 
+; Codebereich 1: darf den zur Verfügung stehenden Bereich nicht überschreiten!
+
+!set part1_end = (part1_real_end-part1_real)+part1
+!if ( part1_end > $B63D ) {
+	!error "Code-Teil 1 ist zu lang! ",part1,"-",part1_end
+}
 
 
 ; ******************************* part 4 *************************************
 
-!macro part4_code .rom {
+part4_real
+!pseudopc $b6c1 {
 
-!if .rom != 0 {			; ROM-Patch?
-	jmp part4_continue	; nur für ROM-Patch
-	; Dies überspringt die Heap-Korrektur, für
-	; einen String vom String-Descriptor-Stack,
-	; falls der sich zuoberst am Heap befindet.
-	; von $B6C1 bis $B6D5
-} else {
-;B6C1: D0 13     BNE $B6D6	; Sring auf SDS?
-;B6C3: C4 34     CPY $34	; ja, dann String am Heap-Top?
-;B6C5: D0 0F     BNE $B6D6	; Low-Byte, nein
-;B6C7: E4 33     CPX $33
-;B6C9: D0 0B     BNE $B6D6	; High-Byte, nein
-;B6CB: 48        PHA		; ja, SDS-String am Heap-Top!
-				; also wieder entfernen
+part4:
 
-	; die Originalroutine entfernt nur den String
-	; (korrigiert den Heap um die Stringlänge), aber
-	; hier muss auch noch der Backlink entfernt
-	; werden:
-	; (Implementierung mit ADC statt INC braucht 1 Byte mehr Platz,
-	;  wenngleich auch etwas schneller.)
-LB6CC:
-	sec			; Länge in A, bereits am Stack
-	adc $33			; $33/34 += A + 1 (Backlink 1. Teil)
-	sta $33
-	bcc +
-	inc $34
-+	inc $33			; $33/34 += 1 (Backlink 2. Teil)
-	bne +
-	inc $34
-+	pla
-	; ersetzt die folgende Heap-Korrektur, die nur
-	; die String-Länge berücksichtigt ...
-;B6CC: 18        CLC
-;B6CD: 65 33     ADC $33	; Heap-Top (bottom of string space)
-;B6CF: 85 33     STA $33	; um String-Länge (in A)
-;B6D1: 90 02     BCC $B6D5	; erhöhen
-;B6D3: E6 34     INC $34
-;B6D5: 68        PLA
-	jmp $B6D6		; zurück ins ROM
-}
+part4_continue = $b6d6
+	jmp part4_continue
 
 ;**** Nächste Array-Variable und Backlink setzen
 ;
@@ -603,20 +582,24 @@ backlinkarr:
 	lda (ptr),y		; Offset nächstes Array
 	clc			; Bugfix 1: C=0 definiert setzen
 	adc aryptr
-!if .rom != 0 {			; ROM-Patch?
-	jmp backlinkarr2	; nur für ROM-Patch
+	jmp backlinkarr2
 				; weiter an anderer Stelle!
+blapast
+!if blapast > part4_continue {
+	!error "part4 ist zu lang!"
 }
-}	; macro part4_code
+}
+part4_real_end
 
 
 ; ******************************* part 3 *************************************
 
-!macro part3_code .rom {
+part3_real
+!pseudopc $e474 {
 
-!if .rom != 0 {			; ROM-Patch?
+part3:
+
 	!byte  0 		; Einschaltmeldung kürzen
-}
 
 backlinkarr2:
 	sta aryptr		; Folge-Array L
@@ -657,17 +640,20 @@ setptr	sta ptr			; Arbeitszeiger setzen
 	stx ptr+1
 	rts			; immer Z=0
 
-; für ROM-Patch:
 ;--- $e4b7 - $e4d2 unused ($aa)
 ;--- $e4d3 - $e4d9 unused ($aa) bei altem kernal,
 ;----              sonst Patch für andere Zwecke
 
-}	; macro part3_code ende
+}
+part3_real_end
 
 
 ; ******************************* part 2 *************************************
 
-!macro part2_code {
+part2_real
+!pseudopc $e4ba {
+
+part2:
 
 ;**** String Allocation (Fortsetzung)
 ;
@@ -702,8 +688,7 @@ sa1	lda #$ff		; Backlink H = Markierung "Lücke"
 	rts
 
   } else {
-; alternative, etwas kürzere Variante (-3 T, -2 B),
-; aber NICHT VERWENDBAR!
+; alternative, etwas kürzere Variante (-3 T, -2 B)
 
 stralloc:
 	sta strptr		; strptr = A/X = FRETOP
@@ -723,78 +708,13 @@ sa1	lda #$ff		; Backlink H = Markierung "Lücke"
 	pla			; Länge vom Stack nehmen
 	rts
 				; Hier weicht strptr+1 u.U. von fretop+1 ab,
-				; was aber ein Problem darstellt, da
-				; es im BASIC-Interpreter ab $B68C eine
-				; Stelle gibt, wo etwa im Zuge der
-				; String-Addition die zusammengefügten
-				; Strings in den Zielbereich kopiert werden.
-				; Dabei dient strptr/strptr+1 als Ziel! 
+				; was aber kein Problem darstellt, da
+				; es im BASIC-Interpreter keine Stellt gibt,
+				; die nach einem allocate-Aufruf den
+				; Pointer strptr/strptr+1 verwendet!
   }
 }
 
-
-
-!ifndef startaddress {
-
-;********************************* ROM Version *******************************
-
-!source "loader.asm"
-
-;
-; Patch-Liste für "loader"
-;
-
-patchlist:
-
-!wo part1_real,part1_real_end-part1_real,part1
-!wo part2_real,part2_real_end-part2_real,part2
-!wo part3_real,part3_real_end-part3_real,part3
-!wo part4_real,part4_real_end-part4_real,part4
-!wo 0  ; Endemarkierung
-
-!set part1_rom = $b4f4
-!set part2_rom = $e4ba
-!set part3_rom = $e474
-!set part4_rom = $b6c1
-!set part4_continue = $b6d6
-
-
-part1_real
-!pseudopc part1_rom {
-
-part1:
-	+part1_code 1
-}
-part1_real_end
-
-	; Codebereich 1: darf den zur Verfügung stehenden Bereich nicht überschreiten!
-	!set part1_end = (part1_real_end-part1_real)+part1
-	!if ( part1_end > $B63D ) {
-		!error "Code-Teil 1 ist zu lang! ",part1,"-",part1_end
-	}
-
-part4_real
-!pseudopc part4_rom {
-part4:
-	+part4_code 1
-!if * > part4_continue {
-	!error "part4 ist zu lang!"
-}
-}
-part4_real_end
-
-part3_real
-!pseudopc part3_rom {
-part3:
-	+part3_code 1
-}
-part3_real_end
-
-part2_real
-!pseudopc part2_rom {
-part2:
-	+part2_code
-}
 part2_real_end
 
 
@@ -805,66 +725,3 @@ part2_real_end
 !if (garcoll != docollect) {
 	!error "Einstiegspunkt nicht an richtiger Stelle! ",garcoll,"!=",docollect
 }
-
-} else {
-;********************************* ROM Version *******************************
-
-	* = startaddress
-
-
-; Installer
-
-install:
-        ; BASIC ins RAM kopieren, um die GC-Routine
-        ; zu patchen ...
-        lda #memrom
-        sta prozport		; alles ROM (also vom ROM kopieren)
-
-        ldy #<basic		; ROM-Beginn
-        sty ptr
-        lda #>basic     
-        sta ptr+1		; BASIC-ROM Anfang
-        ldx #>(romsize)		; BASIC-ROM Länge in Pages
-cpyrom  lda (ptr),y		; ROM lesen
-        sta (ptr),y		; RAM schreiben
-        iny
-        bne cpyrom
-        inc ptr+1		; nächste Page
-        dex			; Page-Zähler
-        bne cpyrom
-
-        lda prozport		; auf RAM umschalten
-        and #%11111110		; "BASIC-ROM aus"-Maske
-        sta prozport
-
-        lda #<docollect		; "jmp docollect"
-        sta garcoll+1		; patchen ...
-        lda #>docollect
-        sta garcoll+2
-
-        lda #<allocate		; "jmp allocate"
-        sta getspa+1		; patchen ...
-        lda #>allocate
-        sta getspa+2
-
-        lda #<LB6CC		; "jmp LB6CC"
-        sta $b6cc+1		; patchen ...
-        lda #>LB6CC
-        sta $b6cc+2
-
-        lda #$4c		; JMP-Opcode
-        sta garcoll
-        sta getspa
-        sta $b6cc
-	rts
-
-	; Code-Teile zustammenstellen, sind nun unmittelbar hintereinander ..
-
-	+part1_code 0		; ohne ROM-Spezialitäten, da ist part2_code
-				; inkludiert!
-	+part4_code 0		; ohne ROM-Spezialitäten
-	+part3_code 0		; ohne ROM-Spezialitäten
-
-
-}
-

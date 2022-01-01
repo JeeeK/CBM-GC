@@ -1,4 +1,3 @@
-	basic	= $a000	; unused
 	pend	= $865	; ?
 	l2	= $b507	; ?
 	sdsnext	= $b52d
@@ -22,8 +21,6 @@
 	part1_end	= $b639	; ?
 	len_l	= $4f
 	len_h	= $50
-	part4_rom	= $b6c1
-	part3_rom	= $e474
 	basicerror	= $b4d2
 	checkcollect	= $b511	; ?
 	cw3	= $b5ac	; ?
@@ -33,7 +30,6 @@
 	cw1	= $b582	; ?
 	ptr	= $22
 	alloc	= $b520	; ?
-	part2_rom	= $e4ba
 	cw5	= $b5c6	; ?
 	aryptr	= $58
 	cw4	= $b5bc	; ?
@@ -44,10 +40,9 @@
 	sa1	= $e4c9	; ?
 	loader	= $80d
 	fretop	= $33
-	getspa	= $b4f4	; unused
 	basicrom	= $a000
-	part1_rom	= $b4f4
 	backlink	= $b5e6	; ?
+	blapast	= $b6d6
 	cwnocopy	= $b5d6	; unused
 	nohighcorr	= $83f	; ?
 	prozport	= $1

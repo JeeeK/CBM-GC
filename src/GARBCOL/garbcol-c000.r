@@ -740,135 +740,7 @@
    738                          
    739                          ;********************************* ROM Version *******************************
    740                          
-
-; ******** Source: loader.asm
-     1                          ;
-     2                          ; *********** Loader
-     3                          ;
-     4                          ;       2013 11 10 johann e. klasek, johann at klasek at
-     5                          ;
-     6                          
-     7                          ; --- Temporäre Variablen:
-     8                          
-     9                          ptr		= $22		; Zeropage, frei
-    10                          ptr_l		= ptr
-    11                          ptr_h		= ptr+1
-    12                          
-    13                          len		= $4f		; Zeropage, temp. frei
-    14                          len_l		= len
-    15                          len_h		= len+1
-    16                          
-    17                          dest		= $51		; Zeropage, temp. frei
-    18                          dest_l		= dest
-    19                          dest_h		= dest+1
-    20                          
-    21                          
-    22                          ; --- Konstanten:
-    23                          
-    24                          basicrom	= $a000		; Startadresse
-    25                          kernalrom	= $e000		; Startadresse
-    26                          
-    27                          ; --- Ein-/Ausgabe:
-    28                          
-    29                          prozport 	= $01		; Prozessorport
-    30                          
-    31                          memrom		= %00110111	; Basic+Kernal ROM
-    32                          membas		= %00110110	; Basic ram+Kernal ROM
-    33                          memram		= %00110101	; Basic+Kernal ROM
-    34                          
-    35                          
-    36                          *= $0801
-    37                          basic_start
-    38                          ;       2013 sys2061
-    39  0801 0b08dd079e         	!by <EOP,>EOP,<(2013),>(2013),$9E
-    40  0806 32303631           	!tx "2061"
-    41  080a 00                 	!by 0 			; End of Line
-    42  080b 0000               EOP	!by 0, 0		; Basic-Programmende
-    43                          
-    44                          loader
-    45                          !if loader != 2061 {
-    46                          	!error "Loader-Adresse stimmt nicht mit SYS-Adresse überein!"
-    47                          }
-    48  080d a000               	ldy #0
-    49  080f a937               	lda #memrom
-    50  0811 8501               	sta prozport		; ROM einblenden
-    51  0813 8422               	sty ptr_l
-    52                          
-    53                          	; Basic und Kernal ins RAM kopieren
-    54                          
-    55  0815 a9a0               	lda #>basicrom		; Basic ROM Start
-    56  0817 206a08             	jsr copyram
-    57  081a a9e0               	lda #>kernalrom		; Kernal ROM Start
-    58  081c 206a08             	jsr copyram
-    59                          
-    60                          	; Patchliste abarbeiten (Basic und Kernal betreffend)
-    61                          
-    62  081f a200               	ldx #0
-    63  0821 bd7b08             nextp	lda patchlist,x
-    64  0824 8522               	sta ptr
-    65  0826 a8                        	tay
-    66                          
-    67  0827 bd7c08             	lda patchlist+1,x
-    68  082a 8523               	sta ptr_h
-    69  082c d003               	bne patch
-    70  082e 98                 	tya
-    71  082f f034               	beq pend
-    72                          
-    73                          patch	
-    74  0831 bd7e08             	lda patchlist+3,x
-    75  0834 8550               	sta len_h
-    76  0836 bd7d08             	lda patchlist+2,x
-    77  0839 854f               	sta len_l
-    78  083b f002               	beq nohighcorr		; dec 0/0 Korrektur
-    79  083d e650               	inc len_h
-    80                          nohighcorr
-    81                          
-    82  083f bd7f08             	lda patchlist+4,x
-    83  0842 8551               	sta dest_l
-    84                          
-    85  0844 bd8008             	lda patchlist+5,x
-    86  0847 8552               	sta dest_h
-    87                          
-    88  0849 a000               	ldy #0
-    89  084b b122               ploop	lda (ptr),y		; Patch an richtige Adresse
-    90  084d 9151               	sta (dest),y		; übertragen
-    91  084f c8                 	iny
-    92  0850 d004               	bne nohigh
-    93  0852 e623               	inc ptr_h		; High Byte bei Überlauf
-    94  0854 e652               	inc dest_h
-    95                          nohigh
-    96  0856 c64f               	dec len_l		; Länge herunter
-    97  0858 d0f1               	bne ploop		; zählen nach
-    98  085a c650               	dec len_h		; dec 0/0 Methode
-    99  085c d0ed               	bne ploop
-   100  085e 8a                 	txa			; Index auf nächsten Patch
-   101  085f 18                 	clc			; positionieren ...
-   102  0860 6906               	adc #6
-   103  0862 aa                 	tax
-   104  0863 d0bc               	bne nextp		; immer
-   105                          
-   106                          pend
-   107  0865 a935               	lda #memram		; BASIC, KERNAL RAM aktivieren
-   108  0867 8501               	sta prozport
-   109  0869 60                 	rts
-   110                          
-   111                          
-   112                          ; 8kByte Block an geleiche Stelle kopieren
-   113                          
-   114                          copyram
-   115  086a 8523               	sta ptr_h		; Startadresse
-   116  086c a220               	ldx #$20		; Pages: 8K
-   117  086e b122               toram	lda (ptr),y		; ROM lesen
-   118  0870 9122               	sta (ptr),y		; RAM schreiben
-   119  0872 c8                 	iny
-   120  0873 d0f9               	bne toram
-   121  0875 e623               	inc ptr_h		; nächste "Page"
-   122  0877 ca                 	dex
-   123  0878 d0f4               	bne toram
-   124  087a 60                 	rts
-   125                          
-
-; ******** Source: garbcol.asm
+   741                          !source "loader.asm"
    742                          
    743                          ;
    744                          ; Patch-Liste für "loader"
@@ -876,11 +748,11 @@
    746                          
    747                          patchlist:
    748                          
-   749  087b 95084501f4b4       !wo part1_real,part1_real_end-part1_real,part1
-   750  0881 250a1900bae4       !wo part2_real,part2_real_end-part2_real,part2
-   751  0887 ef09360074e4       !wo part3_real,part3_real_end-part3_real,part3
-   752  088d da091500c1b6       !wo part4_real,part4_real_end-part4_real,part4
-   753  0893 0000               !wo 0  ; Endemarkierung
+   749                          !wo part1_real,part1_real_end-part1_real,part1
+   750                          !wo part2_real,part2_real_end-part2_real,part2
+   751                          !wo part3_real,part3_real_end-part3_real,part3
+   752                          !wo part4_real,part4_real_end-part4_real,part4
+   753                          !wo 0  ; Endemarkierung
    754                          
    755                          !set part1_rom = $b4f4
    756                          !set part2_rom = $e4ba
@@ -893,6 +765,103 @@
    763                          !pseudopc part1_rom {
    764                          
    765                          part1:
+   766                          	+part1_code 1
+   767                          }
+   768                          part1_real_end
+   769                          
+   770                          	; Codebereich 1: darf den zur Verfügung stehenden Bereich nicht überschreiten!
+   771                          	!set part1_end = (part1_real_end-part1_real)+part1
+   772                          	!if ( part1_end > $B63D ) {
+   773                          		!error "Code-Teil 1 ist zu lang! ",part1,"-",part1_end
+   774                          	}
+   775                          
+   776                          part4_real
+   777                          !pseudopc part4_rom {
+   778                          part4:
+   779                          	+part4_code 1
+   780                          !if * > part4_continue {
+   781                          	!error "part4 ist zu lang!"
+   782                          }
+   783                          }
+   784                          part4_real_end
+   785                          
+   786                          part3_real
+   787                          !pseudopc part3_rom {
+   788                          part3:
+   789                          	+part3_code 1
+   790                          }
+   791                          part3_real_end
+   792                          
+   793                          part2_real
+   794                          !pseudopc part2_rom {
+   795                          part2:
+   796                          	+part2_code
+   797                          }
+   798                          part2_real_end
+   799                          
+   800                          
+   801                          ; Einsprungspunkt an korrekter Position?
+   802                          
+   803                          ; Kann erst nach dem Label docollect gemacht werden!
+   804                          
+   805                          !if (garcoll != docollect) {
+   806                          	!error "Einstiegspunkt nicht an richtiger Stelle! ",garcoll,"!=",docollect
+   807                          }
+   808                          
+   809                          } else {
+   810                          ;********************************* ROM Version *******************************
+   811                          
+   812                          	* = startaddress
+   813                          
+   814                          
+   815                          ; Installer
+   816                          
+   817                          install:
+   818                                  ; BASIC ins RAM kopieren, um die GC-Routine
+   819                                  ; zu patchen ...
+   820  c000 a937                       lda #memrom
+   821  c002 8501                       sta prozport		; alles ROM (also vom ROM kopieren)
+   822                          
+   823  c004 a000                       ldy #<basic		; ROM-Beginn
+   824  c006 8422                       sty ptr
+   825  c008 a9a0                       lda #>basic     
+   826  c00a 8523                       sta ptr+1		; BASIC-ROM Anfang
+   827  c00c a220                       ldx #>(romsize)		; BASIC-ROM Länge in Pages
+   828  c00e b122               cpyrom  lda (ptr),y		; ROM lesen
+   829  c010 9122                       sta (ptr),y		; RAM schreiben
+   830  c012 c8                         iny
+   831  c013 d0f9                       bne cpyrom
+   832  c015 e623                       inc ptr+1		; nächste Page
+   833  c017 ca                         dex			; Page-Zähler
+   834  c018 d0f4                       bne cpyrom
+   835                          
+   836  c01a a501                       lda prozport		; auf RAM umschalten
+   837  c01c 29fe                       and #%11111110		; "BASIC-ROM aus"-Maske
+   838  c01e 8501                       sta prozport
+   839                          
+   840  c020 a995                       lda #<docollect		; "jmp docollect"
+   841  c022 8d27b5                     sta garcoll+1		; patchen ...
+   842  c025 a9c0                       lda #>docollect
+   843  c027 8d28b5                     sta garcoll+2
+   844                          
+   845  c02a a94d                       lda #<allocate		; "jmp allocate"
+   846  c02c 8df5b4                     sta getspa+1		; patchen ...
+   847  c02f a9c0                       lda #>allocate
+   848  c031 8df6b4                     sta getspa+2
+   849                          
+   850  c034 a9b6                       lda #<LB6CC		; "jmp LB6CC"
+   851  c036 8dcdb6                     sta $b6cc+1		; patchen ...
+   852  c039 a9c1                       lda #>LB6CC
+   853  c03b 8dceb6                     sta $b6cc+2
+   854                          
+   855  c03e a94c                       lda #$4c		; JMP-Opcode
+   856  c040 8d26b5                     sta garcoll
+   857  c043 8df4b4                     sta getspa
+   858  c046 8dccb6                     sta $b6cc
+   859  c049 60                 	rts
+   860                          
+   861                          	; Code-Teile zustammenstellen, sind nun unmittelbar hintereinander ..
+   862                          
 
 ; ******** Source: garbcol.asm, macro: part1_code
    187                          .rom
@@ -915,490 +884,42 @@
    204                          basicerror = $b4d2 
    205                          
    206                          basicerror
-   207                           jmp $b4d2
+   207  c04a 4cd2b4              jmp $b4d2
    208                          
    209                          
    210                          allocate
-   211  0895 460f                lsr collected 
-   212  0897 48                 retry pha 
+   211  c04d 460f                lsr collected 
+   212  c04f 48                 retry pha 
    213                           
    214                           
-   215  0898 49ff                eor #$ff 
-   216  089a 38                  sec
-   217  089b 6533                adc fretop 
-   218  089d a634                ldx fretop+1
-   219  089f b002                bcs l1
-   220  08a1 ca                  dex
-   221  08a2 38                  sec
-   222  08a3 e902               l1 sbc #2 
-   223  08a5 b001                bcs l2
-   224  08a7 ca                  dex
-   225  08a8 e432               l2 cpx strend+1 
-   226  08aa 9006                bcc checkcollect
-   227  08ac d013                bne alloc 
-   228  08ae c531                cmp strend 
-   229  08b0 b00f                bcs alloc 
+   215  c050 49ff                eor #$ff 
+   216  c052 38                  sec
+   217  c053 6533                adc fretop 
+   218  c055 a634                ldx fretop+1
+   219  c057 b002                bcs l1
+   220  c059 ca                  dex
+   221  c05a 38                  sec
+   222  c05b e902               l1 sbc #2 
+   223  c05d b001                bcs l2
+   224  c05f ca                  dex
+   225  c060 e432               l2 cpx strend+1 
+   226  c062 9006                bcc checkcollect
+   227  c064 d013                bne alloc 
+   228  c066 c531                cmp strend 
+   229  c068 b00f                bcs alloc 
    230                          checkcollect
-   231  08b2 a210                ldx #16 
-   232  08b4 a50f                lda collected
-   233  08b6 30bb                bmi basicerror 
-   234  08b8 2026b5              jsr docollect 
-   235  08bb 660f                ror collected 
-   236  08bd 68                  pla 
-   237  08be 4cf6b4              jmp retry 
+   231  c06a a210                ldx #16 
+   232  c06c a50f                lda collected
+   233  c06e 30da                bmi basicerror 
+   234  c070 2095c0              jsr docollect 
+   235  c073 660f                ror collected 
+   236  c075 68                  pla 
+   237  c076 4c4fc0              jmp retry 
    238                          
-   239  08c1 2067b5             alloc jsr setfretop 
+   239  c079 20d6c0             alloc jsr setfretop 
    240                          !if .rom != 0 { 
-   241  08c4 4cbae4              jmp stralloc 
+   241                           jmp stralloc 
    242                          
-   243                           +part2_code 
-   244                          
-   245                          
-   246                          
-   247                          
-   248                          
-   249                          
-   250                          
-   251                          
-   252                          
-   253                          
-   254                          
-   255                          
-   256                          docollect
-   257                          
-   258                          
-   259                          
-   260                          
-   261  08c7 a919               sds
-   262  08c9 a200                ldx #>sdsbase 
-   263  08cb 20a5e4              jsr setptr 
-   264                          
-   265  08ce c516               sdsnext cmp sdsptr 
-   266  08d0 f005                beq vars 
-   267  08d2 20e6b5              jsr backlink 
-   268  08d5 f0f7                beq sdsnext 
-   269                          
-   270                          
-   271                          
-   272  08d7 a905               vars
-   273  08d9 8553                sta desclen
-   274  08db a52d                lda vartab 
-   275  08dd a62e                ldx vartab+1
-   276  08df 20a5e4              jsr setptr 
-   277                          
-   278  08e2 e430               varnext cpx arytab+1 
-   279  08e4 d004                bne varbl
-   280  08e6 c52f                cmp arytab
-   281  08e8 f005                beq arrays 
-   282  08ea 201db6             varbl jsr backlinkvar 
-   283  08ed d0f3                bne varnext 
-   284                          
-   285                          
-   286                          
-   287                          arrays
-   288  08ef 8558                sta aryptr 
-   289  08f1 8659                stx aryptr+1 
-   290  08f3 a003                ldy #3 
-   291  08f5 8453                sty desclen
-   292                          
-   293  08f7 e432               arrnext cpx strend+1 
-   294  08f9 d004                bne arrbl
-   295  08fb c531                cmp strend
-   296  08fd f00e                beq cleanwalk
-   297  08ff 20c4b6             arrbl jsr backlinkarr 
-   298  0902 d0f3                bne arrnext 
-   299                          
-   300                          
-   301                          
-   302                          
-   303                          cfinish
-   304  0904 a54e                lda newptr 
-   305  0906 a64f                ldx newptr+1
-   306                          setfretop
-   307  0908 8533                sta fretop 
-   308  090a 8634                stx fretop+1 
-   309  090c 60                  rts 
-   310                          
-   311                          
-   312                          
-   313                          
-   314                          
-   315                          cleanwalk
-   316  090d a537                lda memsiz 
-   317  090f a638                ldx memsiz+1
-   318  0911 854e                sta newptr 
-   319  0913 864f                stx newptr+1 
-   320                          
-   321                          
-   322                          
-   323  0915 e434               cwnext cpx fretop+1 
-   324  0917 d004                bne cwclean 
-   325  0919 c533                cmp fretop 
-   326  091b f0e7                beq cfinish 
-   327                          
-   328                          
-   329                          
-   330  091d 38                 cwclean sec 
-   331  091e e902                sbc #2
-   332  0920 b001                bcs cw1
-   333  0922 ca                  dex 
-   334                          
-   335  0923 20a5e4             cw1 jsr setptr 
-   336                          
-   337  0926 a000                ldy #0
-   338  0928 b122                lda (ptr),y 
-   339  092a c8                  iny 
-   340  092b aa                  tax 
-   341  092c b122                lda (ptr),y 
-   342  092e c9ff                cmp #$ff 
-   343  0930 900c                bcc cwactive 
-   344                          
-   345  0932 8a                  txa 
-   346  0933 49ff                eor #$ff 
-   347  0935 6522                adc ptr 
-   348  0937 a623                ldx ptr+1 
-   349  0939 b0da                bcs cwnext 
-   350  093b ca                  dex 
-   351                          
-   352  093c d0d7               cw2 bne cwnext 
-   353                           
-   354                          
-   355                          
-   356                          
-   357                          cwactive 
-   358  093e 8560                sta descptr+1 
-   359  0940 865f                stx descptr 
-   360                          
-   361  0942 a54e                lda newptr 
-   362  0944 e901                sbc #1 
-   363  0946 854e                sta newptr 
-   364  0948 b003                bcs cw3
-   365  094a c64f                dec newptr+1
-   366  094c 38                  sec 
-   367                          
-   368  094d a9ff               cw3 lda #$ff 
-   369  094f 914e                sta (newptr),y 
-   370  0951 88                  dey 
-   371                          !ifdef no_opt_2 {
-   372                           lda (descptr),y 
-   373                           sta (newptr),y 
-   374                          
-   375                           
-   376                           
-   377                          
-   378  0952 a54e                lda newptr 
-   379  0954 f15f                sbc (descptr),y 
-   380  0956 854e                sta newptr
-   381  0958 b003                bcs cw4
-   382  095a c64f                dec newptr+1
-   383  095c 38                  sec 
-   384                          
-   385  095d a522               cw4 lda ptr 
-   386  095f f15f                sbc (descptr),y 
-   387  0961 8522                sta ptr 
-   388  0963 b002                bcs cw5
-   389  0965 c623                dec ptr+1
-   390                          cw5
-   391                           
-   392                           
-   393                           
-   394                           
-   395                          !ifdef opt_no_copy {
-   396                           cmp newptr 
-   397                           bne cw6 
-   398                           lda ptr+1 
-   399                           cmp newptr+1
-   400                           beq cwheapordered 
-   401                          cw6
-   402                          
-   403                          
-   404  0967 b15f                lda (descptr),y 
-   405                          !ifndef use_fast_copy {
-   406                          
-   407                           
-   408                          !ifdef no_opt_2 {
-   409                           beq cwnocopy 
-   410                           
-   411                           tay 
-   412                          
-   413                           tay 
-   414                           bne cwbllen 
-   415                           
-   416                          
-   417                          cwloop dey 
-   418                           lda (ptr),y 
-   419                          cwbllen sta (newptr),y 
-   420                           tya 
-   421                           bne cwloop 
-   422                          
-   423                          
-   424                          
-   425                           
-   426  0969 a8                  tay 
-   427                          !ifdef no_opt_2 {
-   428                           bne cwentry 
-   429                           
-   430                          
-   431  096a d002                bne cwbllen 
-   432                           
-   433                          
-   434                           
-   435  096c b122               cwloop lda (ptr),y 
-   436  096e 914e               cwbllen sta (newptr),y 
-   437  0970 88                 cwentry dey 
-   438  0971 d0f9                bne cwloop 
-   439  0973 b122               cwone lda (ptr),y 
-   440  0975 914e                sta (newptr),y 
-   441                          
-   442                          
-   443                          cwnocopy
-   444                           
-   445  0977 c8                  iny 
-   446  0978 a54e                lda newptr 
-   447  097a 915f                sta (descptr),y 
-   448  097c c8                  iny 
-   449  097d a54f                lda newptr+1
-   450  097f 915f                sta (descptr),y 
-   451                          
-   452                          cwheapordered
-   453  0981 a522                lda ptr
-   454  0983 a623                ldx ptr+1 
-   455  0985 d08e                bne cwnext 
-   456                          
-   457                          
-   458                          
-   459                          
-   460                          
-   461                          
-   462                          
-   463                          
-   464                          
-   465                          
-   466                          
-   467                          
-   468                          backlink
-   469  0987 a000                ldy #0
-   470  0989 b122                lda (ptr),y 
-   471  098b f023                beq blnext 
-   472  098d c8                  iny
-   473  098e 18                  clc
-   474  098f 7122                adc (ptr),y 
-   475  0991 854e                sta newptr 
-   476  0993 aa                  tax
-   477  0994 c8                  iny
-   478  0995 b122                lda (ptr),y
-   479  0997 6900                adc #0
-   480  0999 854f                sta newptr+1 
-   481  099b c532                cmp strend+1 
-   482  099d 9011                bcc blnext 
-   483  099f d004                bne blsetdesc
-   484  09a1 e431                cpx strend 
-   485  09a3 900b                bcc blnext 
-   486                          
-   487                          blsetdesc
-   488  09a5 a001                ldy #1
-   489  09a7 a523                lda ptr+1
-   490  09a9 914e                sta (newptr),y 
-   491  09ab 88                  dey
-   492  09ac a522                lda ptr
-   493  09ae 914e                sta (newptr),y 
-   494                          
-   495  09b0 a553               blnext lda desclen 
-   496  09b2 18                  clc 
-   497  09b3 6522                adc ptr 
-   498  09b5 8522                sta ptr
-   499  09b7 9002                bcc +
-   500  09b9 e623                inc ptr+1
-   501  09bb a623               + ldx ptr+1 
-   502  09bd 60                  rts
-   503                          
-   504                          
-   505                          
-   506                          
-   507                          
-   508                          
-   509                          
-   510                          
-   511                          
-   512                          
-   513                          backlinkvar
-   514  09be a000                ldy #0
-   515  09c0 b122                lda (ptr),y 
-   516  09c2 aa                  tax 
-   517  09c3 c8                  iny
-   518  09c4 b122                lda (ptr),y 
-   519  09c6 a8                  tay 
-   520                          
-   521  09c7 a902                lda #2 
-   522  09c9 18                  clc
-   523  09ca 6522                adc ptr 
-   524  09cc 8522                sta ptr
-   525  09ce 9002                bcc +
-   526  09d0 e623                inc ptr+1
-   527                          +
-   528  09d2 8a                  txa 
-   529  09d3 30db                bmi blnext 
-   530  09d5 98                  tya
-   531  09d6 30af                bmi backlink 
-   532  09d8 10d6                bpl blnext 
-   533                          
-
-; ******** Source: garbcol.asm
-   767                          }
-   768                          part1_real_end
-   769                          
-   770                          	; Codebereich 1: darf den zur Verfügung stehenden Bereich nicht überschreiten!
-   771                          	!set part1_end = (part1_real_end-part1_real)+part1
-   772                          	!if ( part1_end > $B63D ) {
-   773                          		!error "Code-Teil 1 ist zu lang! ",part1,"-",part1_end
-   774                          	}
-   775                          
-   776                          part4_real
-   777                          !pseudopc part4_rom {
-   778                          part4:
-
-; ******** Source: garbcol.asm, macro: part4_code
-   540                          .rom
-   541                          
-   542                          !if .rom != 0 { 
-   543  09da 4cd6b6              jmp part4_continue 
-   544                           
-   545                           
-   546                           
-   547                           
-   548                          
-   549                          
-   550                          
-   551                          
-   552                          
-   553                          
-   554                          
-   555                           
-   556                          
-   557                           
-   558                           
-   559                           
-   560                           
-   561                           
-   562                           
-   563                          LB6CC
-   564                           sec 
-   565                           adc $33 
-   566                           sta $33
-   567                           bcc +
-   568                           inc $34
-   569                          + inc $33 
-   570                           bne +
-   571                           inc $34
-   572                          + pla
-   573                           
-   574                           
-   575                          
-   576                          
-   577                          
-   578                          
-   579                          
-   580                          
-   581                           jmp $B6D6 
-   582                          
-   583                          
-   584                          
-   585                          
-   586                          
-   587                          
-   588                          
-   589                          
-   590                          
-   591                          
-   592                          
-   593                          
-   594                          backlinkarr
-   595  09dd a000                ldy #0
-   596  09df b122                lda (ptr),y 
-   597  09e1 08                  php 
-   598  09e2 c8                  iny
-   599  09e3 b122                lda (ptr),y 
-   600  09e5 aa                  tax 
-   601                          
-   602  09e6 c8                  iny
-   603  09e7 b122                lda (ptr),y 
-   604  09e9 18                  clc 
-   605  09ea 6558                adc aryptr
-   606                          !if .rom != 0 { 
-   607  09ec 4c75e4              jmp backlinkarr2 
-   608                           
-   609                          
-
-; ******** Source: garbcol.asm
-   780                          !if * > part4_continue {
-   781                          	!error "part4 ist zu lang!"
-   782                          }
-   783                          }
-   784                          part4_real_end
-   785                          
-   786                          part3_real
-   787                          !pseudopc part3_rom {
-   788                          part3:
-
-; ******** Source: garbcol.asm, macro: part3_code
-   615                          .rom
-   616                          
-   617                          !if .rom != 0 { 
-   618  09ef 00                  !byte 0 
-   619                          
-   620                          
-   621                          backlinkarr2
-   622  09f0 8558                sta aryptr 
-   623  09f2 c8                  iny
-   624  09f3 b122                lda (ptr),y
-   625  09f5 6559                adc aryptr+1 
-   626  09f7 8559                sta aryptr+1 
-   627                          
-   628  09f9 28                  plp 
-   629  09fa 3020                bmi blaskip 
-   630  09fc 8a                  txa
-   631  09fd 101d                bpl blaskip 
-   632                          
-   633  09ff c8                  iny 
-   634  0a00 b122                lda (ptr),y 
-   635  0a02 0a                  asl 
-   636  0a03 6905                adc #5 
-   637  0a05 6522                adc ptr 
-   638  0a07 8522                sta ptr 
-   639  0a09 9002                bcc bla1
-   640  0a0b e623                inc ptr+1 
-   641  0a0d a623               bla1 ldx ptr+1 
-   642                          
-   643  0a0f e459               blanext cpx aryptr+1 
-   644  0a11 d004                bne blaset 
-   645  0a13 c558                cmp aryptr
-   646  0a15 f007                beq blafinish 
-   647                          blaset
-   648  0a17 20e6b5              jsr backlink 
-   649  0a1a d0f3                bne blanext 
-   650                          
-   651                          blaskip
-   652  0a1c a558                lda aryptr 
-   653                          blafinish
-   654  0a1e a659                ldx aryptr+1 
-   655                          
-   656  0a20 8522               setptr sta ptr 
-   657  0a22 8623                stx ptr+1
-   658  0a24 60                  rts 
-   659                          
-   660                          
-   661                          
-   662                          
-   663                          
-   664                          
-
-; ******** Source: garbcol.asm
-   790                          }
-   791                          part3_real_end
-   792                          
-   793                          part2_real
-   794                          !pseudopc part2_rom {
-   795                          part2:
 
 ; ******** Source: garbcol.asm, macro: part2_code
    670                          
@@ -1417,23 +938,23 @@
    683                          
    684                           !ifndef alternate_stralloc {
    685                          stralloc
-   686  0a25 8535                sta strptr 
-   687  0a27 8636                stx strptr+1
-   688  0a29 aa                  tax 
-   689  0a2a 68                  pla 
-   690  0a2b 48                  pha 
-   691  0a2c a8                  tay 
-   692  0a2d 9133                sta (fretop),y 
-   693  0a2f c8                  iny 
-   694  0a30 d002                bne sa1 
-   695  0a32 e634                inc fretop+1 
+   686  c07c 8535                sta strptr 
+   687  c07e 8636                stx strptr+1
+   688  c080 aa                  tax 
+   689  c081 68                  pla 
+   690  c082 48                  pha 
+   691  c083 a8                  tay 
+   692  c084 9133                sta (fretop),y 
+   693  c086 c8                  iny 
+   694  c087 d002                bne sa1 
+   695  c089 e634                inc fretop+1 
    696                          
-   697  0a34 a9ff               sa1 lda #$ff 
-   698  0a36 9133                sta (fretop),y
-   699  0a38 a436                ldy strptr+1
-   700  0a3a 8434                sty fretop+1 
-   701  0a3c 68                  pla 
-   702  0a3d 60                  rts
+   697  c08b a9ff               sa1 lda #$ff 
+   698  c08d 9133                sta (fretop),y
+   699  c08f a436                ldy strptr+1
+   700  c091 8434                sty fretop+1 
+   701  c093 68                  pla 
+   702  c094 60                  rts
    703                          
    704                           
    705                          
@@ -1465,77 +986,432 @@
    731                           
    732                           
 
+; ******** Source: garbcol.asm, macro: part1_code
+   243                          
+   244                          
+   245                          
+   246                          
+   247                          
+   248                          
+   249                          
+   250                          
+   251                          
+   252                          
+   253                          
+   254                          
+   255                          
+   256                          docollect
+   257                          
+   258                          
+   259                          
+   260                          
+   261  c095 a919               sds
+   262  c097 a200                ldx #>sdsbase 
+   263  c099 2008c2              jsr setptr 
+   264                          
+   265  c09c c516               sdsnext cmp sdsptr 
+   266  c09e f005                beq vars 
+   267  c0a0 2063c1              jsr backlink 
+   268  c0a3 f0f7                beq sdsnext 
+   269                          
+   270                          
+   271                          
+   272  c0a5 a905               vars
+   273  c0a7 8553                sta desclen
+   274  c0a9 a52d                lda vartab 
+   275  c0ab a62e                ldx vartab+1
+   276  c0ad 2008c2              jsr setptr 
+   277                          
+   278  c0b0 e430               varnext cpx arytab+1 
+   279  c0b2 d004                bne varbl
+   280  c0b4 c52f                cmp arytab
+   281  c0b6 f005                beq arrays 
+   282  c0b8 209ac1             varbl jsr backlinkvar 
+   283  c0bb d0f3                bne varnext 
+   284                          
+   285                          
+   286                          
+   287                          arrays
+   288  c0bd 8558                sta aryptr 
+   289  c0bf 8659                stx aryptr+1 
+   290  c0c1 a003                ldy #3 
+   291  c0c3 8453                sty desclen
+   292                          
+   293  c0c5 e432               arrnext cpx strend+1 
+   294  c0c7 d004                bne arrbl
+   295  c0c9 c531                cmp strend
+   296  c0cb f00e                beq cleanwalk
+   297  c0cd 20c9c1             arrbl jsr backlinkarr 
+   298  c0d0 d0f3                bne arrnext 
+   299                          
+   300                          
+   301                          
+   302                          
+   303                          cfinish
+   304  c0d2 a54e                lda newptr 
+   305  c0d4 a64f                ldx newptr+1
+   306                          setfretop
+   307  c0d6 8533                sta fretop 
+   308  c0d8 8634                stx fretop+1 
+   309  c0da 60                  rts 
+   310                          
+   311                          
+   312                          
+   313                          
+   314                          
+   315                          cleanwalk
+   316  c0db a537                lda memsiz 
+   317  c0dd a638                ldx memsiz+1
+   318  c0df 854e                sta newptr 
+   319  c0e1 864f                stx newptr+1 
+   320                          
+   321                          
+   322                          
+   323  c0e3 e434               cwnext cpx fretop+1 
+   324  c0e5 d004                bne cwclean 
+   325  c0e7 c533                cmp fretop 
+   326  c0e9 f0e7                beq cfinish 
+   327                          
+   328                          
+   329                          
+   330  c0eb 38                 cwclean sec 
+   331  c0ec e902                sbc #2
+   332  c0ee b001                bcs cw1
+   333  c0f0 ca                  dex 
+   334                          
+   335  c0f1 2008c2             cw1 jsr setptr 
+   336                          
+   337  c0f4 a000                ldy #0
+   338  c0f6 b122                lda (ptr),y 
+   339  c0f8 c8                  iny 
+   340  c0f9 aa                  tax 
+   341  c0fa b122                lda (ptr),y 
+   342  c0fc c9ff                cmp #$ff 
+   343  c0fe 900c                bcc cwactive 
+   344                          
+   345  c100 8a                  txa 
+   346  c101 49ff                eor #$ff 
+   347  c103 6522                adc ptr 
+   348  c105 a623                ldx ptr+1 
+   349  c107 b0da                bcs cwnext 
+   350  c109 ca                  dex 
+   351                          
+   352  c10a d0d7               cw2 bne cwnext 
+   353                           
+   354                          
+   355                          
+   356                          
+   357                          cwactive 
+   358  c10c 8560                sta descptr+1 
+   359  c10e 865f                stx descptr 
+   360                          
+   361  c110 a54e                lda newptr 
+   362  c112 e901                sbc #1 
+   363  c114 854e                sta newptr 
+   364  c116 b003                bcs cw3
+   365  c118 c64f                dec newptr+1
+   366  c11a 38                  sec 
+   367                          
+   368  c11b a9ff               cw3 lda #$ff 
+   369  c11d 914e                sta (newptr),y 
+   370  c11f 88                  dey 
+   371                          !ifdef no_opt_2 {
+   372  c120 b15f                lda (descptr),y 
+   373  c122 914e                sta (newptr),y 
+   374                          
+   375                           
+   376                           
+   377                          
+   378  c124 a54e                lda newptr 
+   379  c126 f15f                sbc (descptr),y 
+   380  c128 854e                sta newptr
+   381  c12a b003                bcs cw4
+   382  c12c c64f                dec newptr+1
+   383  c12e 38                  sec 
+   384                          
+   385  c12f a522               cw4 lda ptr 
+   386  c131 f15f                sbc (descptr),y 
+   387  c133 8522                sta ptr 
+   388  c135 b002                bcs cw5
+   389  c137 c623                dec ptr+1
+   390                          cw5
+   391                           
+   392                           
+   393                           
+   394                           
+   395                          !ifdef opt_no_copy {
+   396  c139 c54e                cmp newptr 
+   397  c13b d006                bne cw6 
+   398  c13d a523                lda ptr+1 
+   399  c13f c54f                cmp newptr+1
+   400  c141 f01a                beq cwheapordered 
+   401                          cw6
+   402                          
+   403                          
+   404  c143 b15f                lda (descptr),y 
+   405                          !ifndef use_fast_copy {
+   406                          
+   407                           
+   408                          !ifdef no_opt_2 {
+   409                           beq cwnocopy 
+   410                           
+   411                           tay 
+   412                          
+   413                           tay 
+   414                           bne cwbllen 
+   415                           
+   416                          
+   417                          cwloop dey 
+   418                           lda (ptr),y 
+   419                          cwbllen sta (newptr),y 
+   420                           tya 
+   421                           bne cwloop 
+   422                          
+   423                          
+   424                          
+   425                           
+   426  c145 a8                  tay 
+   427                          !ifdef no_opt_2 {
+   428  c146 d004                bne cwentry 
+   429                           
+   430                          
+   431                           bne cwbllen 
+   432                           
+   433                          
+   434                           
+   435  c148 b122               cwloop lda (ptr),y 
+   436  c14a 914e               cwbllen sta (newptr),y 
+   437  c14c 88                 cwentry dey 
+   438  c14d d0f9                bne cwloop 
+   439  c14f b122               cwone lda (ptr),y 
+   440  c151 914e                sta (newptr),y 
+   441                          
+   442                          
+   443                          cwnocopy
+   444                           
+   445  c153 c8                  iny 
+   446  c154 a54e                lda newptr 
+   447  c156 915f                sta (descptr),y 
+   448  c158 c8                  iny 
+   449  c159 a54f                lda newptr+1
+   450  c15b 915f                sta (descptr),y 
+   451                          
+   452                          cwheapordered
+   453  c15d a522                lda ptr
+   454  c15f a623                ldx ptr+1 
+   455  c161 d080                bne cwnext 
+   456                          
+   457                          
+   458                          
+   459                          
+   460                          
+   461                          
+   462                          
+   463                          
+   464                          
+   465                          
+   466                          
+   467                          
+   468                          backlink
+   469  c163 a000                ldy #0
+   470  c165 b122                lda (ptr),y 
+   471  c167 f023                beq blnext 
+   472  c169 c8                  iny
+   473  c16a 18                  clc
+   474  c16b 7122                adc (ptr),y 
+   475  c16d 854e                sta newptr 
+   476  c16f aa                  tax
+   477  c170 c8                  iny
+   478  c171 b122                lda (ptr),y
+   479  c173 6900                adc #0
+   480  c175 854f                sta newptr+1 
+   481  c177 c532                cmp strend+1 
+   482  c179 9011                bcc blnext 
+   483  c17b d004                bne blsetdesc
+   484  c17d e431                cpx strend 
+   485  c17f 900b                bcc blnext 
+   486                          
+   487                          blsetdesc
+   488  c181 a001                ldy #1
+   489  c183 a523                lda ptr+1
+   490  c185 914e                sta (newptr),y 
+   491  c187 88                  dey
+   492  c188 a522                lda ptr
+   493  c18a 914e                sta (newptr),y 
+   494                          
+   495  c18c a553               blnext lda desclen 
+   496  c18e 18                  clc 
+   497  c18f 6522                adc ptr 
+   498  c191 8522                sta ptr
+   499  c193 9002                bcc +
+   500  c195 e623                inc ptr+1
+   501  c197 a623               + ldx ptr+1 
+   502  c199 60                  rts
+   503                          
+   504                          
+   505                          
+   506                          
+   507                          
+   508                          
+   509                          
+   510                          
+   511                          
+   512                          
+   513                          backlinkvar
+   514  c19a a000                ldy #0
+   515  c19c b122                lda (ptr),y 
+   516  c19e aa                  tax 
+   517  c19f c8                  iny
+   518  c1a0 b122                lda (ptr),y 
+   519  c1a2 a8                  tay 
+   520                          
+   521  c1a3 a902                lda #2 
+   522  c1a5 18                  clc
+   523  c1a6 6522                adc ptr 
+   524  c1a8 8522                sta ptr
+   525  c1aa 9002                bcc +
+   526  c1ac e623                inc ptr+1
+   527                          +
+   528  c1ae 8a                  txa 
+   529  c1af 30db                bmi blnext 
+   530  c1b1 98                  tya
+   531  c1b2 30af                bmi backlink 
+   532  c1b4 10d6                bpl blnext 
+   533                          
+
 ; ******** Source: garbcol.asm
-   797                          }
-   798                          part2_real_end
-   799                          
-   800                          
-   801                          ; Einsprungspunkt an korrekter Position?
-   802                          
-   803                          ; Kann erst nach dem Label docollect gemacht werden!
-   804                          
-   805                          !if (garcoll != docollect) {
-   806                          	!error "Einstiegspunkt nicht an richtiger Stelle! ",garcoll,"!=",docollect
-   807                          }
-   808                          
-   809                          } else {
-   810                          ;********************************* ROM Version *******************************
-   811                          
-   812                          	* = startaddress
-   813                          
-   814                          
-   815                          ; Installer
-   816                          
-   817                          install:
-   818                                  ; BASIC ins RAM kopieren, um die GC-Routine
-   819                                  ; zu patchen ...
-   820                                  lda #memrom
-   821                                  sta prozport		; alles ROM (also vom ROM kopieren)
-   822                          
-   823                                  ldy #<basic		; ROM-Beginn
-   824                                  sty ptr
-   825                                  lda #>basic     
-   826                                  sta ptr+1		; BASIC-ROM Anfang
-   827                                  ldx #>(romsize)		; BASIC-ROM Länge in Pages
-   828                          cpyrom  lda (ptr),y		; ROM lesen
-   829                                  sta (ptr),y		; RAM schreiben
-   830                                  iny
-   831                                  bne cpyrom
-   832                                  inc ptr+1		; nächste Page
-   833                                  dex			; Page-Zähler
-   834                                  bne cpyrom
-   835                          
-   836                                  lda prozport		; auf RAM umschalten
-   837                                  and #%11111110		; "BASIC-ROM aus"-Maske
-   838                                  sta prozport
-   839                          
-   840                                  lda #<docollect		; "jmp docollect"
-   841                                  sta garcoll+1		; patchen ...
-   842                                  lda #>docollect
-   843                                  sta garcoll+2
-   844                          
-   845                                  lda #<allocate		; "jmp allocate"
-   846                                  sta getspa+1		; patchen ...
-   847                                  lda #>allocate
-   848                                  sta getspa+2
-   849                          
-   850                                  lda #<LB6CC		; "jmp LB6CC"
-   851                                  sta $b6cc+1		; patchen ...
-   852                                  lda #>LB6CC
-   853                                  sta $b6cc+2
-   854                          
-   855                                  lda #$4c		; JMP-Opcode
-   856                                  sta garcoll
-   857                                  sta getspa
-   858                                  sta $b6cc
-   859                          	rts
-   860                          
-   861                          	; Code-Teile zustammenstellen, sind nun unmittelbar hintereinander ..
-   862                          
-   863                          	+part1_code 0		; ohne ROM-Spezialitäten, da ist part2_code
+   863                           ohne ROM-Spezialitäten, da ist part2_code
    864                          				; inkludiert!
-   865                          	+part4_code 0		; ohne ROM-Spezialitäten
-   866                          	+part3_code 0		; ohne ROM-Spezialitäten
+
+; ******** Source: garbcol.asm, macro: part4_code
+   540                          .rom
+   541                          
+   542                          !if .rom != 0 { 
+   543                           jmp part4_continue 
+   544                           
+   545                           
+   546                           
+   547                           
+   548                          
+   549                          
+   550                          
+   551                          
+   552                          
+   553                          
+   554                          
+   555                           
+   556                          
+   557                           
+   558                           
+   559                           
+   560                           
+   561                           
+   562                           
+   563                          LB6CC
+   564  c1b6 38                  sec 
+   565  c1b7 6533                adc $33 
+   566  c1b9 8533                sta $33
+   567  c1bb 9002                bcc +
+   568  c1bd e634                inc $34
+   569  c1bf e633               + inc $33 
+   570  c1c1 d002                bne +
+   571  c1c3 e634                inc $34
+   572  c1c5 68                 + pla
+   573                           
+   574                           
+   575                          
+   576                          
+   577                          
+   578                          
+   579                          
+   580                          
+   581  c1c6 4cd6b6              jmp $B6D6 
+   582                          
+   583                          
+   584                          
+   585                          
+   586                          
+   587                          
+   588                          
+   589                          
+   590                          
+   591                          
+   592                          
+   593                          
+   594                          backlinkarr
+   595  c1c9 a000                ldy #0
+   596  c1cb b122                lda (ptr),y 
+   597  c1cd 08                  php 
+   598  c1ce c8                  iny
+   599  c1cf b122                lda (ptr),y 
+   600  c1d1 aa                  tax 
+   601                          
+   602  c1d2 c8                  iny
+   603  c1d3 b122                lda (ptr),y 
+   604  c1d5 18                  clc 
+   605  c1d6 6558                adc aryptr
+   606                          !if .rom != 0 { 
+   607                           jmp backlinkarr2 
+   608                           
+   609                          
+
+; ******** Source: garbcol.asm
+   865                           ohne ROM-Spezialitäten
+
+; ******** Source: garbcol.asm, macro: part3_code
+   615                          .rom
+   616                          
+   617                          !if .rom != 0 { 
+   618                           !byte 0 
+   619                          
+   620                          
+   621                          backlinkarr2
+   622  c1d8 8558                sta aryptr 
+   623  c1da c8                  iny
+   624  c1db b122                lda (ptr),y
+   625  c1dd 6559                adc aryptr+1 
+   626  c1df 8559                sta aryptr+1 
+   627                          
+   628  c1e1 28                  plp 
+   629  c1e2 3020                bmi blaskip 
+   630  c1e4 8a                  txa
+   631  c1e5 101d                bpl blaskip 
+   632                          
+   633  c1e7 c8                  iny 
+   634  c1e8 b122                lda (ptr),y 
+   635  c1ea 0a                  asl 
+   636  c1eb 6905                adc #5 
+   637  c1ed 6522                adc ptr 
+   638  c1ef 8522                sta ptr 
+   639  c1f1 9002                bcc bla1
+   640  c1f3 e623                inc ptr+1 
+   641  c1f5 a623               bla1 ldx ptr+1 
+   642                          
+   643  c1f7 e459               blanext cpx aryptr+1 
+   644  c1f9 d004                bne blaset 
+   645  c1fb c558                cmp aryptr
+   646  c1fd f007                beq blafinish 
+   647                          blaset
+   648  c1ff 2063c1              jsr backlink 
+   649  c202 d0f3                bne blanext 
+   650                          
+   651                          blaskip
+   652  c204 a558                lda aryptr 
+   653                          blafinish
+   654  c206 a659                ldx aryptr+1 
+   655                          
+   656  c208 8522               setptr sta ptr 
+   657  c20a 8623                stx ptr+1
+   658  c20c 60                  rts 
+   659                          
+   660                          
+   661                          
+   662                          
+   663                          
+   664                          
+
+; ******** Source: garbcol.asm
+   866                           ohne ROM-Spezialitäten
    867                          
    868                          
    869                          }
