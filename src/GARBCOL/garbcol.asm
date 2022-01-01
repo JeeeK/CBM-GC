@@ -1,49 +1,107 @@
 !to "garbcol.o",cbm	
 ;
-;  **** garbage collection ****
+;  **** Garbage Collection ****
 ;
-; 64er, oct 1988
+; 64'er, Oct. 1988
 
 ;
-; ueberarbeitetet und korrigiert:
-;	2013 11 10 johann e. klasek, johann at klasek at
+; Überarbeitetet und korrigiert:
+;	2013-11-15 Johann E. Klasek, johann at klasek at
 ;
-; bugfixes:
+; Bugfixes:
+;	1) in backlinkarr:
+;	   C-Flag ist beim Errechnen des Folge-Arrays
+;	   definiert gelöscht. 
+;          Sonst werden ev. nicht alle Elemente
+;          aller Arrays mit einem korrekten
+;          Backlink versehen und der
+;          String-Heap wird durch die GC
+;          korrumpiert!
+;	2) in backlinkarr bei blanext:
+;	   Muss zum Aufrufer immer mit Z=0
+;	   rückkehren, und erkennt
+;	   sonst immer nur das 1. Array!
+;	   Damit liegen die anderen Strings
+;	   dann im freien Bereich und
+;	   werden nach und nach überschrieben!
 ;
+; Optimierungen:
+;	Schnellere Kopierroutine (+5 Byte Code, -2 T/Zeichen):
+;	Wegen des längeren Codes und und einem deswegen länger werdenden
+;	Branch-Offset, wurde der Code ab cfinish zurückversetzt.
+;	Es sind aber in Teilbereich 1 nur noch 3 Bytes frei -> nicht verwendbar.
+;!set use_fast_copy=1
 
 
-; basic-zeiger und -konstanten
 
-sdsbase  = $0019	; 1. element stringdescriptorstack
-			; waechst nach oben, max. 3 elemente
-			; zu je 3 bytes.
-sdsptr   = $16		; zeiger auf naechstes freie element
-			; des stringdescriptorstacks
+; Basic-Zeiger und -konstanten
 
-vartab   = $2d		; basicprogrammende = variablenanfang
-arytab   = $2f		; variablenende = arraybereichanfang
-strend   = $31		; arraybereichende = unterste stringheap adresse 
-fretop   = $33		; aktuelle stringheap adresse
-memsiz   = $37		; hoechste ram-adresse fuer basic, start
-			; des nach unten wachsenden stringheaps
+collected = $0f
+
+sdsbase  = $0019	; 1. Element String-Descriptor-Stacks (SDS)
+			; wächst nach oben, max. 3 Elemente
+			; zu je 3 Bytes.
+sdsptr   = $16		; Zeiger auf nächstes freie Element
+			; des String-Descriptor-Stacks (SDS)
+
+vartab   = $2d		; Basicprogrammende = Variablenanfang
+arytab   = $2f		; Variablenende = Array-Bereichanfang
+strend   = $31		; Array-Bereichende = unterste String-Heap-Adresse 
+fretop   = $33		; aktuelle String-Heap-Adresse
+strptr	 = $35		; temporärer Stringzeiger
+memsiz   = $37		; höchste RAM-Adresse für Basic, Start
+			; des nach unten wachsenden String-Heaps
+; Hilfsvariablen
+
+ptr	 = $22		; Arbeitszeiger
+newptr	 = $4e		; Neuer Stringzeiger
+desclen	 = $53		; akt. Länge eines Stringdescriptors
+aryptr	 = $58		; Array-Zeiger
+descptr	 = $5f		; Descriptor-Zeiger
 
 garcoll  = $b526
 
-; vorbelegung der speicherplaetze
+; Vorbelegung der Speicherplätze
 
-romsize  = $2000	; rom laenge 8k
+romsize  = $2000	; ROM Länge 8K
 
-prozport = $01		; prozessorport
-memrom = %00110111	; basic+kernal rom
-membas = %00110110	; basic ram+kernal rom
-memram = %00110101	; basic+kernal ram
+prozport = $01		; Prozessorport
+memrom = %00110111	; Basic+Kernal ROM
+membas = %00110110	; Basic RAM+kernal ROM
+memram = %00110101	; Basic+Kernal RAM
+
+
+; Datenstrukturen
+;
+; String am Heap:
+;
+;   +--------------------------------------+
+;   |       +--------------+               |
+;   V       |              V               |
+;   +---+---+---+          +-----------+---+---+
+;   |LEN|LO |HI |          |STRINGDATEN|LO |HI |
+;   +---+---+---+          +-----------+---+---+
+;   ^    *******           ^            *******
+;   |       String.adr.    |               Descriptor-Adr.
+;   +-Descriptor-Adresse   +-Stringadresse
+;
+; Lücken am Heap:
+;                      
+;   +-------------+ +----------------+
+;   V             | V                |
+;    +-----------+---+---+---------+---+---+
+;    |LÜCKE 2    |LEN|$FF|LÜCKE 1  |LEN|$FF|
+;    +-----------+---+---+---------+---+---+
+;                  ^  ***            ^  ***
+;                  |   Lückenmark.   |   Lückenmarkierung
+;                  Backlink-Adresse  Backlink-Adresse
+
 
 
 !source "loader.asm"
 
-
 ;
-; Patch-Liste
+; Patch-Liste für "loader"
 ;
 
 patchlist:
@@ -55,6 +113,7 @@ patchlist:
 !wo 0  ; Endemarkierung
 
 
+; ******************************* part 1 *************************************
 
 part1_real:
 
@@ -62,356 +121,463 @@ part1_real:
 
 part1:
 
-;***** speicher von stringheap anfordern
+;***** Speicher von String-Heap anfordern
 ;
-;	in:	a			; länge anforderung
-;		$33/34			; fretop
-;	mod:	$0f			; gc aufgerufen flag
-;		$35/36			; temp. zeiger
-;	out:	$33/34			; fretop
+;	in:	A		; Länge anforderung
+;		fretop
+;	mod:	collected	; "GC aufgerufen" Flag
+;		strptr		; temp. Zeiger
+;	out:	fretop		; Adresse auf String
+;		X,Y		; Adresse auf String
+;
+; Der String wird im Backlink stets als ungebrauchte Lücke
+; markiert! Dann muss die GC nur noch die Backlinks
+; der aktiven Strings setzen und kann die ungebrauchten
+; Strings überspringen.
 
-        lsr $0f		; set not collected state
-        pha		; länge der anforderung,
-			; für 2. teil
-        eor #$ff		; negieren
-        sec
-        adc $33
-        ldx $34
-        bcs $b502
-        dex
-        sec
-        sbc #$02		; platz für backlink einrechnen
-        bcs $b507
-        dex
-        cpx $32		; stringheap voll (arraybereich ende)?
-        bcc $b511
-        bne $b520		; nein, bereich anfordern
-        cmp $31
-        bcs $b520		; nein, bereich anfordern
-        ldx #$10
-        lda $0f
-        bmi $b4d2		; collection schon gelaufen?
-        jsr $b526		; nein, dann garbage collection, c=1 (immer!)
-        ror $0f		; mark collected state, bit7 gesetzt
-        pla		; länge angeforderter bereich
-        jmp $b4f6		; nochmal versuchen
 
-        jsr $b577		; fretop = a/x
-        jmp $e4ba		; allocate final
+basicerror = $b4d2		; Basic-Fehlermeldung
+
+allocate:
+	lsr collected		; Flag löschen
+retry	pha			; Länge der Anforderung,
+				; für 2. Teil
+				; Länge 0 möglich, verbraucht aber 2 Bytes
+	eor #$ff		; negieren
+	sec
+	adc fretop		; A/X = fretop; A/X -= Länge
+	ldx fretop+1
+	bcs l1
+	dex
+	sec
+l1	sbc #2			; A/X -= 2 Platz für Backlink einrechnen
+	bcs l2
+	dex
+l2	cpx strend+1		; String-Heap voll (Array-Bereichende)?
+	bcc checkcollect
+	bne alloc		; nein, Bereich anfordern
+	cmp strend 
+	bcs alloc		; nein, Bereich anfordern
+checkcollect
+	ldx #16			; Basic-Fehler 16: "OUT OF MEMORY"
+	lda collected
+	bmi basicerror		; Collection schon gelaufen?
+	jsr docollect		; nein, dann Garbage Collection, C=1 (immer!)
+	ror collected		; Flag setzen (Bit 7) setzen
+	pla			; Länge angeforderter Bereich
+	jmp retry		; nochmal versuchen (ob durch GC Platz frei wurde)
+
+alloc	jsr setfretop		; FRETOP = A/X
+	jmp stralloc		; zum 2. Teil: Allokation abschließen
+
 
 ;***** garbage collection
 
-; backlink aller stringdescriptorstack strings setzen
+;	in:	-
+;	mod:	ptr		; Zeiger auf alten String-Heap
+;		newptr		; Zeiger auf neuen String-Heap
+;		descptr		; Zeiger auf Descriptor
+;		desclen		; Descriptor-Schrittweite
+;	out:	fretop		; Neue String-Heap-Position
+;		C=1
 
-        lda #$19		; start adr. string descriptor stack
-        ldx #$00
-        jsr $e4a5		; set $22/$23
-
-        cmp $16		; at 1. free sds element?
-        beq $b536		; sds done
-        jsr $b5e8		; backlink setzen
-        beq $b52d		; unbedingt
-
-; backlink aller stringvariablen setzen
-
-        lda #$05		; descriptor-schritt bei variablen
-        sta $53
-        lda $2d		; variablenbeginn
-        ldx $2e
-        jsr $e4a5		; 22/23 = a/x
-
-        cpx $30		; variablenende?
-        bne $b549
-        cmp $2f
-        beq $b54e		; ja, weiter mit arrays
-        jsr $b61f		; backlink für nächste stringvariable setzen
-        bne $b541		; unbedingt
-
-; backlink aller stringarrays setzen
-
-        sta $58		; variablenbereichende = arraybereichanfang
-        stx $59
-        ldy #$03		; descriptor-schritt bei stringarrays
-        sty $53
-
-        cpx $32		; arraybereichende?
-        bne $b55e
-        cmp $31
-        beq $b563
-        jsr $b6c4		; backlinks für nächstes stringarray setzen
-        bne $b556		; unbedingt.
-
-        lda $37		; memtop
-        ldx $38
-        sta $4e		; -> aufgeräumtzeiger
-        stx $4f
-
-; aufräumschleife
-
-        cpx $34		; a/x: altes fretop erreicht,
-        bne $b57c		; dann heap durch und fertig.
-        cmp $33		; sonst aufräumen ...
-        bne $b57c
-        lda $4e		; aufgeräumtzeiger ist
-        ldx $4f
-        sta $33		; neues fretop
-        stx $34
-        rts		; fertig!
-
-; nächsten string "aufräumen" ...
-
-        sec		; aufräumtzeiger auf backlink
-        sbc #$02
-        bcs $b582
-        dex		; a/x -> backlink
-        jsr $e4a5		; a/x -> 22/23 (arbeitszeiger)
-        ldy #$00
-        lda ($22),y	; backlink low oder lückenlänge
-        iny
-        tax		; -> x
-        lda ($22),y	; backlink high
-        cmp #$ff		; string "nicht gebraucht" markierung
-        bcc $b59e		; aktiver string
-        txa		; lückenlänge
-        eor #$ff		; negieren
-        adc $22		; 22/23 - lückenlänge
-        ldx $23
-        bcs $b59b		; korr: geht auch gleich nach $b56b
-        dex		; 
-        jmp $b56b		; korr: bne $b56b (sollte nie 0 werden können!)
-
-; aktiven string nach oben schieben
-
-        sta $60		; descriptor-adresse
-        stx $5f
-        lda $4e		; aufgeräumtzeiger -= 2
-        sbc #$01		; weil c=0!
-        sta $4e
-        bcs $b5ad
-        dec $4f
-        sec		; y=1
-
-        lda #$ff		; backlink h: als lücke markieren
-        sta ($4e),y	; 
-        dey		; y=0
-        lda ($5f),y	; descriptor: stringlänge
-        sta ($4e),y	; backlink l: lückenlänge
-
-        lda $4e		; aufgeräumtzeiger -= stringlänge
-        sbc ($5f),y	; immer c=1
-        sta $4e
-        bcs $b5c1
-        dec $4f
-        sec
-
-        iny		; y=1
-        sta ($5f),y	; stringadresse l: neue adresse
-        iny		; y=2
-        lda $4f
-        sta ($5f),y	; stringadresse h: neue adresse
-        ldy #$00
-        lda $22
-        sbc ($5f),y	; immer c=1
-        sta $22		; arbeitszeiger = alte stringadresse
-        bcs $b5d5
-        dec $23
-
-        lda ($5f),y	; stringlänge=0?
-        beq $b5e2		; ja, dann nicht kopieren
-        tay		; länge-1
-
-        dey		; -> startindex fürs kopieren
-        lda ($22),y	; arbeitszeiger mit altem string
-        sta ($4e),y	; aufgeräumtzeiger mit neuem stringort
-        tya		; z-flag!
-        bne $b5da		; index 0 -> fertig kopiert
-
-        lda $22
-        ldx $23
-        bne $b56b		; unbedingt, weiter in schleife
+docollect
 
 
-; backlink setzen
+; Backlink aller temporären Strings am String-Descriptor-Stack setzen
+
+sds:	lda #<sdsbase		; Startadr. String-Descriptor-Stack
+	ldx #>sdsbase		; da in 0-Page, immer 0
+	jsr setptr		; damit ptr setzen
+
+sdsnext	cmp sdsptr		; am 1. freien SDS-Element? (nur Low-Byte!)
+	beq vars		; Ja, SDS durch, weiter mit Variablen
+	jsr backlink		; sonst Backlink setzen
+	beq sdsnext		; immer, weil High-Byte 0; nächsten SDS-Descriptor
+
+; Backlink aller String-Variablen setzen
+
+vars:	lda #5			; Descriptor-Schritt für Variablen
+	sta desclen
+	lda vartab		; Variablenbeginn
+	ldx vartab+1
+	jsr setptr		; ptr = A/X
+
+varnext	cpx arytab+1		; Variablenende?
+	bne varbl
+	cmp arytab
+	beq arrays		; ja, weiter mit Arrays
+varbl	jsr backlinkvar		; Backlink für nächste String-Variable setzen
+	bne varnext		; immer; nächsten Var.-Descriptor
+
+; Backlink bei allen String-Arrays setzen
+
+arrays:
+	sta aryptr		; Variablenbereichende = Array-Bereichanfang
+	stx aryptr+1 
+	ldy #3			; Descriptor-Schritt bei String-Arrays
+	sty desclen
+
+arrnext	cpx strend+1		; Array-Bereichende?
+	bne arrbl
+	cmp strend
+	beq cleanwalk
+arrbl	jsr backlinkarr		; Backlinks für nächstes String-Array setzen -> Z=0!
+	bne arrnext		; immer; nächstes Array-Element
+
+
+; Ende, Zeiger zum neuen String-Heap übernehmen
+
+cfinish
+	lda newptr		; Aufgeräumtzeiger ist ..
+	ldx newptr+1
+setfretop
+	sta fretop		; neues FRETOP
+	stx fretop+1 
+	rts			; fertig!
+
+; Nachdem nun alle Backlinks gesetzt sind
+; den String-Heap von oben nach unten durchgehen
+; und zusammenschieben ...
+
+cleanwalk:
+	lda memsiz		; beim Basic-Speicherende
+	ldx memsiz+1
+	sta newptr		; ... beginnen
+	stx newptr+1 
+
+; Aufräumschleife
+
+cwnext	cpx fretop+1		; A/X: altes FRETOP erreicht,
+	bne cwclean		; dann Heap durch und fertig.
+	cmp fretop		; andernfalls aufräumen ...
+	beq cfinish		; fertig, weil A/X = FRETOP
+
+; nächsten String "aufräumen" ...
+
+cwclean	sec			; Aufräumtzeiger auf backlink
+	sbc #2
+	bcs cw1
+	dex			; A/X -> Backlink
+
+cw1	jsr setptr		; A/X -> ptr (Arbeitszeiger)
+
+	ldy #0
+	lda (ptr),y		; Backlink low oder Lückenlänge
+	iny			; Y=1
+	tax			; -> X
+	lda (ptr),y		; Backlink high
+	cmp #$ff		; String "nicht gebraucht" Markierung
+	bcc cwactive		; aktiver String
+
+	txa			; Lückenlänge
+	eor #$ff		; negieren
+	adc ptr			; (ptr - Lückenlänge)
+	ldx ptr+1 
+	bcs cwnext		; weiter ...
+	dex			; High Byte
+
+cw2	bne cwnext		; immer (Heap ist nie in Page 1)
+
+; einen aktiven String nach oben schieben
+
+cwactive			; immer mit Y=1 angesprungen
+	sta descptr+1		; Descriptor-Adresse
+	stx descptr 
+
+	lda newptr		; Aufgeräumtzeiger -= 2
+	sbc #1			; weil bereits C=0!
+	sta newptr		; newptr -= 2
+	bcs cw3
+	dec newptr+1
+	sec			; für SBC unten
+
+cw3	lda #$ff		; Backlink h: als Lücke markieren
+	sta (newptr),y		; Y=1
+	dey			; Y=0
+	lda (descptr),y		; Descriptor: String-länge
+	sta (newptr),y		; Backlink l: Lückenlänge
+
+	lda newptr		; Aufgeräumtzeiger -= String-Länge
+	sbc (descptr),y		; immer C=1
+	sta newptr
+	bcs cw4
+	dec newptr+1
+	sec			; für SBC unten
+
+cw4	iny			; Y=1
+	sta (descptr),y		; String-Adresse L: neue Adresse
+	iny			; Y=2
+	lda newptr+1
+	sta (descptr),y		; String-Adresse H: neue Adresse
+	ldy #0
+	lda ptr
+	sbc (descptr),y		; immer C=1
+	sta ptr			; Arbeitszeiger = alte String-Adresse
+	bcs cw5
+	dec ptr+1
+cw5
+	lda (descptr),y		; String-Länge=0?
+	beq cwnocopy		; ja, dann nicht kopieren
+	tay			; Länge-1
+
+!ifndef use_fast_copy {
+
+cwloop	dey			; -> Startindex fürs Kopieren
+	lda (ptr),y		; Arbeitszeiger mit altem String
+	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
+	tya			; Test auf Z-Flag!
+	bne cwloop		; Index = 0 -> fertig kopiert
+
+} else {
+
+				; + 5 Byte, -2 T/Zeichen 
+	beq cwone		; nur 1 Byte
+cwloop				; -> Startindex fürs Kopieren
+	lda (ptr),y		; Arbeitszeiger mit altem String
+	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
+	dey			; Test auf Z-Flag!
+	bne cwloop		; Index = 0 -> fertig kopiert
+cwone	lda (ptr),y		; Arbeitszeiger mit altem String
+	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
+
+}
+
+cwnocopy
+	lda ptr
+	ldx ptr+1		; High-Byte immer !=0
+	bne cwnext		; immer; weiter in Schleife
+
+
+;**** Backlink setzen
 ;
-; 	in:	22/23	descriptoradresse
-; 	out:	22/23	descriptoradresse
-;		a/x
-;	destroy: 4e/4f
-;	called:	$b531, $b637
+; 	in:		ptr	Descriptor-Adresse
+; 	out:		ptr	Descriptor-Adresse
+;			A/X
+;			Z=0	wenn nicht am SDS
+;			Z=1	wenn am SDS
+;	destroy:	newptr
+;	called:		blaset, backlinkvar
 
-        ldy #$00
-        lda ($22),y	; stringlänge
-        beq $b611		; fertig, wenn 0
-        iny
-        clc
-        adc ($22),y	; backlinkposition (am stringende)
-        sta $4e		; backlink-zeiger l
-        tax
-        iny
-        lda ($22),y
-        adc #$00
-        sta $4f		; backlink-zeiger h
-        cmp $32		; < arraybereichende (außerhalb heap)?
-        bcc $b611		; ja, denn nächsten string
-        bne $b606
-        cpx $31
-        bcc $b611		; < arraybereichende (außerhalb heap)?
+backlink:
+	ldy #0
+	lda (ptr),y		; String-Länge
+	beq blnext		; fertig, wenn =0
+	iny
+	clc
+	adc (ptr),y		; Backlink-Position (am String-Ende)
+	sta newptr		; Backlink-Zeiger L
+	tax
+	iny
+	lda (ptr),y
+	adc #0
+	sta newptr+1		; Backlink-Zeiger H
+	cmp strend+1		; < Array-Bereichende (außerhalb Heap)?
+	bcc blnext		; ja, denn nächsten String
+	bne blsetdesc
+	cpx strend 
+	bcc blnext		; < Array-Bereichende (außerhalb Heap)?
 
-        ldy #$01
-        lda $23
-        sta ($4e),y	; descriptoradresse ...
-        dey
-        lda $22
-        sta ($4e),y	; in den backlink übertragen
+blsetdesc
+	ldy #1
+	lda ptr+1
+	sta (newptr),y		; Descriptor-Adresse ...
+	dey
+	lda ptr
+	sta (newptr),y		; in den Backlink übertragen
 
-        clc		; nächster string/nächste variable
-        lda $53		; schrittweite zum nächsten
-        adc $22		; descriptor ...
-        sta $22
-        bcc $b61c
-        inc $23
-        ldx $23
-        rts
+blnext	clc			; nächster String/nächste Variable
+	lda desclen		; Schrittweite zum nächsten
+	adc ptr			; Descriptor ...
+	sta ptr
+	bcc bl1
+	inc ptr+1
+bl1	ldx ptr+1		; immer != 0 -> Z=0
+	rts
 
-; nächste stringvariable und backlink setzen
+;**** Nächste String-Variable und Backlink setzen
 ;
-; 	in: 22/23	variablenadresse
-; 	out:	22/23	variablenadresse
-;		a/x
-;	destroy: 4e/4f
-;	called: $b549
+; 	in:		ptr	Variablenadresse
+; 	out:		ptr	Variablenadresse
+;			A/X
+;			Z=0
+;	destroy:	newptr
+;	called:		varbl (vars)
 
-        ldy #$00
-        lda ($22),y	; variablenname 1. zeichen
-        tax
-        iny
-        lda ($22),y	; variablenname 2. zeichen
-        tay
-        clc
-        lda $22		; descriptoradresse (in variable)
-        adc #$02
-        sta $22
-        bcc $b633
-        inc $23
-        txa		; variablen typ prüfen
-        bmi $b611		; keine string, nächste variable
-        tya
-        bmi $b5e8		; backlink setzen
-        bpl $b611		; keine stringvar., nächste variable
+backlinkvar:
+	ldy #0
+	lda (ptr),y		; Variablenname 1. Zeichen
+	tax			; Typstatus merken
+	iny
+	lda (ptr),y		; Variablenname 2. Zeichen
+	tay			; Typstatus merken
+
+	clc
+	lda ptr			; Descriptor-Adresse (in Variable)
+	adc #$02		; erreichnen
+	sta ptr
+	bcc blv1
+	inc ptr+1
+
+blv1	txa			; Variablentyp prüfen
+	bmi blnext		; keine String, nächste Variable
+	tya
+	bmi backlink		; Backlink setzen
+	bpl blnext		; keine String-Var., nächste Variable
 
 }
 part1_real_end
+
+; Codebereich 1: darf den zur Verfügung stehenden Bereich nicht überschreiten!
+
+!set part1_end = (part1_real_end-part1_real)+part1
+!if ( part1_end > $B63D ) {
+	!error "Code-Teil 1 ist zu lang! ",part1,"-",part1_end
+}
+
+
+; ******************************* part 4 *************************************
 
 part4_real
 !pseudopc $b6c1 {
 
 part4:
 
-        jmp $b6d6
+part4_continue = $b6d6
+	jmp part4_continue
 
-; nächste array variable und backlink setzen
+;**** Nächste Array-Variable und Backlink setzen
 ;
-; 	in: 22/23	arrayadresse
-; 	out:	22/23	adresse folge-array
-;		58/59	adresse folge-array
-;		a/x	adresse folge-array
-;	destroy: 4e/4f
-;	called: $b55e
+; 	in: 		ptr	Arrayadresse
+; 	out:		ptr	Adresse Folge-array
+;			aryptr	Adresse Folge-array
+;			A/X	Adresse Folge-array
+;			Z=0
+;	destroy:	newptr
+;	called:		arrbl (arrays)
 
-        ldy #$00
-        lda ($22),y	; variablenname 1. zeichen
-        php		; für später
-        iny
-        lda ($22),y	; variablenname 2. zeichen
-        tax		; für später
-        iny
-        lda ($22),y	; offset nächstes array
-					; bug: clc fehlt!
-        adc $58
-        jmp $e475
+backlinkarr:
+	ldy #0
+	lda (ptr),y		; Variablenname 1. Zeichen
+	php			; für später
+	iny
+	lda (ptr),y		; Variablenname 2. Zeichen
+	tax			; für später
+
+	iny
+	lda (ptr),y		; Offset nächstes Array
+	clc			; Bugfix 1: C=0 definiert setzen
+	adc aryptr
+	jmp backlinkarr2
+				; weiter an anderer Stelle!
+blapast
+!if blapast > part4_continue {
+	!error "part4 ist zu lang!"
+}
 }
 part4_real_end
 
+
+; ******************************* part 3 *************************************
 
 part3_real
 !pseudopc $e474 {
 
 part3:
 
-        brk		; einschaltmeldung kürzen
+	!byte  0 		; Einschaltmeldung kürzen
 
-        sta $58		; folge-array l
-        iny
-        lda ($22),y
-        adc $59
-        sta $59		; folge-array h
-        plp		; arraytyp:
-        bmi $e4a1		; kein stringarray
-        txa
-        bpl $e4a1		; kein stringarray
-        iny		; y=4
-        lda ($22),y	; anzahl der dimensionen
-        asl 		; *2
-        adc #$05		; + 5 (var.name+offset+dimensionen)
-        adc $22		; auf 1. element ...
-        sta $22
-        bcc $e492
-        inc $23
-        ldx $23		; positionieren
+backlinkarr2:
+	sta aryptr		; Folge-Array L
+	iny
+	lda (ptr),y
+	adc aryptr+1 
+	sta aryptr+1		; Folge-Array H
 
-        cpx $59		; arrayende erreicht?
-        bne $e49c		; nein, backlink setzen
-        cmp $58
-        beq $e4a5		; array durch
+	plp			; Arraytyp:
+	bmi blaskip		; kein String-Array
+	txa
+	bpl blaskip		; kein String-Array
 
-        jsr $b5e8		; backlink setzen
-        bne $e494		; unbedingt
+	iny			; Y=4
+	lda (ptr),y		; Anzahl der Dimensionen (< 126 !)
+	asl 			; *2
+	adc #5			; + 5 (Var.Name+Offset+Dimensionen)
+	adc ptr			; auf 1. Element ...
+	sta ptr 
+	bcc bla1
+	inc ptr+1 
+bla1	ldx ptr+1		; positionieren
 
-        lda $58		; arrayzeiger
-        ldx $59
-        sta $22		; arbeitszeiger
-        stx $23
-        rts
+blanext	cpx aryptr+1		; Array-Ende erreicht?
+	bne blaset		; nein, Backlink setzen
+	cmp aryptr
+	beq blafinish		; Array fertig, Bugfix 2: Z-Flag löschen!
+blaset
+	jsr backlink		; Backlink setzen
+	bne blanext		; immer (High-Byte != 0)
+
+blaskip
+	lda aryptr		; Zeiger auf Folge-Array
+blafinish
+	ldx aryptr+1 		; Z=0 sicherstellen
+
+setptr	sta ptr			; Arbeitszeiger setzen
+	stx ptr+1
+	rts			; immer Z=0
 
 ;--- $e4b7 - $e4d2 unused ($aa)
 ;--- $e4d3 - $e4d9 unused ($aa) bei altem kernal,
-;----              patch for rs232-routines
+;----              sonst Patch für andere Zwecke
 
 }
 part3_real_end
 
+
+; ******************************* part 2 *************************************
 
 part2_real
 !pseudopc $e4ba {
 
 part2:
 
-;**** string allocation (fortsetzung)
+;**** String Allocation (Fortsetzung)
 ;
-;	in: 	tos			; länge
-;		33/34			; stringadresse
-;	out:	a			; länge
-;		35/36			; stringadresse
-;	called:	$b523
+;	in: 	TOS		; Länge
+;		fretop		; String-Adresse
+;	out:	fretop		; String-Adresse
+;		strptr		; String-Adresse (wird nicht verwendet)
+;		A		; Länge
+;		X,Y		; String-Adresse
+;	called:	allocate
 
-        sta $35		; 35/36 = a/x = 33/34
-        stx $36
-        tax		; a in x aufheben
-        pla		; länge
-        pha		; wieder auf stack
-        tay		; index=länge (backlink-position)
-        sta ($33),y	; backlink l = string-/lückenlänge
-        iny		; y=len+1
-        bne $e4c9		; wenn länge=255, dann
-        inc $34		; Überlauf, aber nur temporär!
+stralloc:
+	sta strptr		; strptr = A/X = FRETOP
+	stx strptr+1
+	tax			; A in X aufheben
+	pla			; Länge temp. vom Stack 
+	pha			; wieder auf Stack, nun auch in A
+	tay			; Index=Länge (Backlink-position)
+	sta (fretop),y		; Backlink L = String-/Lückenlänge
+	iny			; Y=Länge+1
+	bne sa1			; wenn Länge=255, dann
+	inc fretop+1		; Überlauf, aber nur temporär!
 
-        lda #$ff		; backlink h = markierung "lücke"
-        sta ($33),y
-        ldy $36
-        sty $34		; Überlaufkorr. rückgänig
-        pla		; länge vom stack
-        rts
+sa1	lda #$ff		; Backlink H = Markierung "Lücke"
+	sta (fretop),y
+	ldy strptr+1
+	sty fretop+1		; Überlaufkorr. rückgängig
+	pla			; Länge vom Stack nehmen
+	rts
 
 }
 part2_real_end
 
+
+; Einsprungspunkt an korrekter Position?
+
+; Kann erst nach dem Label docollect gemacht werden!
+
+!if (garcoll != docollect) {
+	!error "Einstiegspunkt nicht an richtiger Stelle! ",garcoll,"!=",docollect
+}
