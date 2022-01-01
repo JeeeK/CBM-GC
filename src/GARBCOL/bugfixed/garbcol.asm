@@ -3,26 +3,7 @@
 ;  **** Garbage Collection ****
 ;
 ; 64'er, Oct. 1988
-;
-; In zwei Schritten wird der String-Speicher kompaktiert:
-;   1) Alle Strings im String-Descriptor-Stack (SDS),
-;      in Variablen und Arrays werden erhalten im
-;      Back-Link den Verweis auf den Descriptor.
-;      Nicht mehr referenzierte Strings bleiben als
-;      ungenutzt markiert und verweisen auf den
-;      nächsten String.
-;   2) Nun wird der String-Speicher absteigend durchgegangen,
-;      wobei nur die aktiven Strings nach "oben" über
-;      etwaige Lücken hinweg kopiert werden. Die ungenutzten
-;      Lücken werden dabei übergangen.
-;      Beim Kopieren wird die Back-Link-Markierung wieder
-;      entfernt, da ja bis zur nächsten Kompaktierung
-;      der Speicher aufgegeben werden könnte.
-; Im Vergleich zu der von CBM eingesetzten Routine, wird
-; hier auf eine Code-intensive Optimierung verzichtet,
-; wenn ein Teil oder der gesamt String-Speicher schon
-; kompaktiert sein sollte. Es werden dann die Strings
-; im schlimmsten Fall wieder über sich selbst kopiert.
+
 ;
 ; Überarbeitetet und korrigiert:
 ;	2013-11-15 Johann E. Klasek, johann at klasek at
@@ -45,37 +26,11 @@
 ;	   werden nach und nach überschrieben!
 ;
 ; Optimierungen:
-;    
-;     * Schnellere Kopierroutine (+5 Byte Code, -2 T/Zeichen):
+;	Schnellere Kopierroutine (+5 Byte Code, -2 T/Zeichen):
 ;	Wegen des längeren Codes und und einem deswegen länger werdenden
 ;	Branch-Offset, wurde der Code ab cfinish zurückversetzt.
-;	Da im Teilbereich 1 nur noch 3 Bytes frei sind, muss auch
-;	noch an anderer Stelle eingespart werden.
-;	Dabei wird unmittelbar vor dem Kopieren des Strings nicht
-;	mehr explizit der Fall eines Strings mit Länge 0 betrachtet,
-;	der an dieser Stelle auch nicht auftreten kann, da
-;	der erste Durchgang durch alle Strings am SDS, bei den
-;	Variablen und den Arrays Strings der Länge 0 übergeht. 
-;	Selbst, wenn jemand böswilligerweise via allocate-Routine
-;	0-Längen-Speicher anfordert (was immer 2 Link-Bytes kostet),
-;	können diese Leerstring nicht referenziert werden. Im Zuge
-;	des zweiten Durchlaufs (Collection) würden diese degenerieren
-;	0-Längen-Strings auch wieder verschwinden.
-;
-;	Aktivierbar via use_fast_copy-Variable.
-;
-;     * allocate etwas kompakter/schneller (-2 Byte Code, -3 T)
-;       Der Back-Link wird via strptr/strptr+1 gesetzt, wobei
-;       bei einem String länger 253 Bytes das High-Byte in strptr+1
-;	erhöht wird, statt dies mit fretop+1 zu machen, welches
-;	dann restauriert werden muss.
-;       
-;	Aktivierbar via alternate_stralloc-Variable.
-;
-
-
-; Die optimierte Kopierroutine verwenden (siehe oben "Optimierungen"):
-!set use_fast_copy=1
+;	Es sind aber in Teilbereich 1 nur noch 3 Bytes frei -> nicht verwendbar.
+;!set use_fast_copy=1
 
 
 
@@ -362,12 +317,12 @@ cw4	iny			; Y=1
 	bcs cw5
 	dec ptr+1
 cw5
-	lda (descptr),y		; String-Länge
+	lda (descptr),y		; String-Länge=0?
+	beq cwnocopy		; ja, dann nicht kopieren
+	tay			; Länge-1
 
 !ifndef use_fast_copy {
 
-	beq cwnocopy		; wenn =0, dann nicht kopieren
-	tay			; Länge
 cwloop	dey			; -> Startindex fürs Kopieren
 	lda (ptr),y		; Arbeitszeiger mit altem String
 	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
@@ -376,13 +331,12 @@ cwloop	dey			; -> Startindex fürs Kopieren
 
 } else {
 
-				; + 3 Byte, -2 T/Zeichen 
-	tay			; Länge
-	bne cwentry		; immer, da Länge in Y>0
+				; + 5 Byte, -2 T/Zeichen 
+	beq cwone		; nur 1 Byte
 cwloop				; -> Startindex fürs Kopieren
 	lda (ptr),y		; Arbeitszeiger mit altem String
 	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
-cwentry	dey			; Test auf Z-Flag!
+	dey			; Test auf Z-Flag!
 	bne cwloop		; Index = 0 -> fertig kopiert
 cwone	lda (ptr),y		; Arbeitszeiger mit altem String
 	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
@@ -432,13 +386,13 @@ blsetdesc
 	lda ptr
 	sta (newptr),y		; in den Backlink übertragen
 
-blnext	lda desclen		; nächster String/nächste Variable
-	clc			; Schrittweite zum nächsten Descriptor
-	adc ptr			; ptr += desclen
+blnext	clc			; nächster String/nächste Variable
+	lda desclen		; Schrittweite zum nächsten
+	adc ptr			; Descriptor ...
 	sta ptr
-	bcc +
+	bcc bl1
 	inc ptr+1
-+	ldx ptr+1		; immer != 0 -> Z=0 (außer bei SDS, Z=1)
+bl1	ldx ptr+1		; immer != 0 -> Z=0
 	rts
 
 ;**** Nächste String-Variable und Backlink setzen
@@ -458,14 +412,14 @@ backlinkvar:
 	lda (ptr),y		; Variablenname 2. Zeichen
 	tay			; Typstatus merken
 
-	lda #2			; Descriptor-Adresse (in Variable)
 	clc
-	adc ptr			; ptr += 2
+	lda ptr			; Descriptor-Adresse (in Variable)
+	adc #$02		; erreichnen
 	sta ptr
-	bcc +
+	bcc blv1
 	inc ptr+1
-+
-	txa			; Variablentyp prüfen
+
+blv1	txa			; Variablentyp prüfen
 	bmi blnext		; keine String, nächste Variable
 	tya
 	bmi backlink		; Backlink setzen
@@ -593,13 +547,10 @@ part2:
 ;		fretop		; String-Adresse
 ;	out:	fretop		; String-Adresse
 ;		strptr		; String-Adresse (wird nicht verwendet)
-;				; (bei alternate_stralloc eventuell mit
-;				; inkrementiertem High-Byte)
 ;		A		; Länge
-;		X,Y		; String-Adresse (L,H)
-;	called:	allocate (in Fortsetzung)
+;		X,Y		; String-Adresse
+;	called:	allocate
 
-  !ifndef alternate_stralloc {
 stralloc:
 	sta strptr		; strptr = A/X = FRETOP
 	stx strptr+1
@@ -619,34 +570,7 @@ sa1	lda #$ff		; Backlink H = Markierung "Lücke"
 	pla			; Länge vom Stack nehmen
 	rts
 
-  } else {
-; alternative, etwas kürzere Varainte
-
-stralloc:
-	sta strptr		; strptr = A/X = FRETOP
-	stx strptr+1
-	tax			; A in X aufheben
-	pla			; Länge temp. vom Stack 
-	pha			; wieder auf Stack, nun auch in A
-	tay			; Index=Länge (Backlink-position)
-	sta (strptr),y		; Backlink L = String-/Lückenlänge
-	iny			; Y=Länge+1
-	bne sa1			; wenn Länge=255, dann
-	inc strptr+1		; Überlauf, aber nur temporär!
-
-sa1	lda #$ff		; Backlink H = Markierung "Lücke"
-	sta (strptr),y
-	ldy fretop+1		; in Y String-Adresse High-Byte
-	pla			; Länge vom Stack nehmen
-	rts
-				; Hier weicht strptr+1 u.U. von fretop+1 ab,
-				; was aber kein Problem darstellt, da
-				; es im BASIC-Interpreter keine Stellt gibt,
-				; die nach einem allocate-Aufruf den
-				; Pointer strptr/strptr+1 verwendet!
-  }
 }
-
 part2_real_end
 
 
