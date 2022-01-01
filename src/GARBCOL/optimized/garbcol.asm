@@ -6,58 +6,47 @@
 ;
 ; In zwei Schritten wird der String-Speicher kompaktiert:
 ;   1) Alle Strings im String-Descriptor-Stack (SDS),
-;      in Variablen und Arrays erhalten im
-;      Backlink den Verweis auf den Descriptor.
+;      in Variablen und Arrays werden erhalten im
+;      Back-Link den Verweis auf den Descriptor.
 ;      Nicht mehr referenzierte Strings bleiben als
 ;      ungenutzt markiert und verweisen auf den
-;      nächsten String Richtung niedriger Adressen.
+;      nächsten String.
 ;   2) Nun wird der String-Speicher absteigend durchgegangen,
 ;      wobei nur die aktiven Strings nach "oben" über
 ;      etwaige Lücken hinweg kopiert werden. Die ungenutzten
 ;      Lücken werden dabei übergangen.
-;      Beim Kopieren wird der Backlink wieder entfernt
-;      (als ungenutzt markiert), da ja bis zur nächsten
-;      Kompaktierung der Speicher aufgegeben werden könnte.
-;
+;      Beim Kopieren wird die Back-Link-Markierung wieder
+;      entfernt, da ja bis zur nächsten Kompaktierung
+;      der Speicher aufgegeben werden könnte.
 ; Im Vergleich zu der von CBM eingesetzten Routine, wird
-; hier auf eine platzraubende Optimierung verzichtet,
+; hier auf eine Code-intensive Optimierung verzichtet,
 ; wenn ein Teil oder der gesamt String-Speicher schon
 ; kompaktiert sein sollte. Es werden dann die Strings
 ; im schlimmsten Fall wieder über sich selbst kopiert.
 ;
-; Ein gleichwertiger Ansatz wäre eine einfache Abfrage
-; bei opt_no_copy, ob ptr (Arbeitszeiger auf den alten
-; Heap) gleich newptr (neuer Heap) ist. Solange diese
-; der Fall ist, ist keine Kopieraktion (und auch
-; keine Descriptor-Korrektur) notwendig.
-; In diesem Fall kann allerdings die Optimierung #3 nicht
-; verwendet werden, da sonst die Backlink-Markierung
-; nicht in allen Fällen passieren würde!
-;
 ; Überarbeitetet und korrigiert:
 ;	2013-11-15 Johann E. Klasek, johann at klasek at
-; Optimiert:
-;	2019-03-20 Johann E. Klasek, johann at klasek at
 ;
 ; Bugfixes:
-;
 ;	1) in backlinkarr:
-;	   das C-Flag ist beim Errechnen des Folge-Arrays
-;	   definiert zu löschen, sonst werden ev. nicht 
-;	   alle Elemente aller Arrays mit einem korrekten
-;	   Backlink versehen und der String-Heap wird 
-;	   durch die GC korrumpiert!
-;
+;	   C-Flag ist beim Errechnen des Folge-Arrays
+;	   definiert gelöscht. 
+;          Sonst werden ev. nicht alle Elemente
+;          aller Arrays mit einem korrekten
+;          Backlink versehen und der
+;          String-Heap wird durch die GC
+;          korrumpiert!
 ;	2) in backlinkarr bei blanext:
-;	   Muss zum Aufrufer immer mit Z=0 rückkehren,
-;	   und erkennt sonst immer nur das 1. Array!
-;	   Damit liegen die anderen Strings dann im 
-;	   freien Bereich und werden nach und nach 
-;	   überschrieben!
+;	   Muss zum Aufrufer immer mit Z=0
+;	   rückkehren, und erkennt
+;	   sonst immer nur das 1. Array!
+;	   Damit liegen die anderen Strings
+;	   dann im freien Bereich und
+;	   werden nach und nach überschrieben!
 ;
 ; Optimierungen:
 ;    
-;    #1 Schnellere Kopierroutine (+5 Byte Code, -2 T/Zeichen):
+;     * Schnellere Kopierroutine (+5 Byte Code, -2 T/Zeichen):
 ;	Wegen des längeren Codes und und einem deswegen länger werdenden
 ;	Branch-Offset, wurde der Code ab cfinish zurückversetzt.
 ;	Da im Teilbereich 1 nur noch 3 Bytes frei sind, muss auch
@@ -75,43 +64,19 @@
 ;
 ;	Aktivierbar via use_fast_copy-Variable.
 ;
-;    #2 allocate etwas kompakter/schneller (-2 Byte Code, -3 T)
-;       Der Backlink wird via strptr/strptr+1 gesetzt, wobei
+;     * allocate etwas kompakter/schneller (-2 Byte Code, -3 T)
+;       Der Back-Link wird via strptr/strptr+1 gesetzt, wobei
 ;       bei einem String länger 253 Bytes das High-Byte in strptr+1
 ;	erhöht wird, statt dies mit fretop+1 zu machen, welches
 ;	dann restauriert werden muss.
 ;       
 ;	Aktivierbar via alternate_stralloc-Variable.
 ;
-;    #3 Die Lückenmarkierung (Low-Byte mit der Länge) wird beim
-;	Kopieren des Strings mitgemacht. (-4 Byte Code, -5 T/String)
-;	Siehe no_opt_3-Abfrage bei Label cw3.
-;
-;    #4 Kein String-Kopieren durchführen, solange der String-Heap
-;	geordnet ist (also solange ptr = newptr ist). Sobald
-;	eine Lücke eliminiert wurde, laufen ptr und newptr auseinander.
-;
 
-; Optimierung #1: Die optimierte Kopierroutine verwenden
-; aktiv
+
+; Die optimierte Kopierroutine verwenden (siehe oben "Optimierungen"):
 !set use_fast_copy=1
 
-; Optimierung #2: etwas kürzere und schnellere stralloc-Routine
-; inaktiv
-;!set alternate_stralloc=1
-
-; Optimierung #3: Lückmarkierung teilweise mit String-Kopieren mitmachen.
-; ist immer aktiv
-
-; Optimierung #4: Kein String-Kopieren, solange Heap geordnet ist.
-; Wenn aktiv (passt aber nicht ins ROM!), dann darf nicht Optimierung #3
-; aktiv sein!
-; inaktiv
-;!set opt_no_copy=1
-
-!ifdef opt_no_copy {
-!set no_opt_3=1
-}
 
 
 ; Basic-Zeiger und -konstanten
@@ -133,8 +98,8 @@ memsiz   = $37		; höchste RAM-Adresse für Basic, Start
 			; des nach unten wachsenden String-Heaps
 ; Hilfsvariablen
 
-ptr	 = $22		; Arbeitszeiger, alter Heap
-newptr	 = $4e		; Neuer Stringzeiger, neuer Heap
+ptr	 = $22		; Arbeitszeiger
+newptr	 = $4e		; Neuer Stringzeiger
 desclen	 = $53		; akt. Länge eines Stringdescriptors
 aryptr	 = $58		; Array-Zeiger
 descptr	 = $5f		; Descriptor-Zeiger
@@ -162,13 +127,13 @@ memram = %00110101	; Basic+Kernal RAM
 ;   |LEN|LO |HI |          |STRINGDATEN|LO |HI |
 ;   +---+---+---+          +-----------+---+---+
 ;   ^    *******           ^            *******
-;   |       String.-Adr.   |               Descriptor-Adr.
-;   +-Descriptor-Adresse   +-String-Adresse
+;   |       String.adr.    |               Descriptor-Adr.
+;   +-Descriptor-Adresse   +-Stringadresse
 ;
 ; Lücken am Heap:
 ;                      
-;   +-------------+   +--------------+
-;   V             |   V              |
+;   +-------------+ +----------------+
+;   V             | V                |
 ;    +-----------+---+---+---------+---+---+
 ;    |LÜCKE 2    |LEN|$FF|LÜCKE 1  |LEN|$FF|
 ;    +-----------+---+---+---------+---+---+
@@ -205,7 +170,7 @@ part1:
 ;
 ;	in:	A		; Länge anforderung
 ;		fretop
-;	mod:	collected	; "GC aufgerufen"-Flag
+;	mod:	collected	; "GC aufgerufen" Flag
 ;		strptr		; temp. Zeiger
 ;	out:	fretop		; Adresse auf String
 ;		X,Y		; Adresse auf String
@@ -335,30 +300,29 @@ cwnext	cpx fretop+1		; A/X: altes FRETOP erreicht,
 
 ; nächsten String "aufräumen" ...
 
-cwclean	sec			; Aufgeräumtzeiger auf Backlink
+cwclean	sec			; Aufräumtzeiger auf backlink
 	sbc #2
 	bcs cw1
 	dex			; A/X -> Backlink
 
-cw1	jsr setptr		; A/X -> ptr (Alt-String-Zeiger)
+cw1	jsr setptr		; A/X -> ptr (Arbeitszeiger)
 
 	ldy #0
 	lda (ptr),y		; Backlink low oder Lückenlänge
 	iny			; Y=1
 	tax			; -> X
 	lda (ptr),y		; Backlink high
-	cmp #$ff		; "String-nicht gebraucht"-Markierung
+	cmp #$ff		; String "nicht gebraucht" Markierung
 	bcc cwactive		; aktiver String
 
 	txa			; Lückenlänge
-	eor #$ff		; negieren, C=1 (Komplement, +1)
+	eor #$ff		; negieren
 	adc ptr			; (ptr - Lückenlänge)
 	ldx ptr+1 
-	bcs cwnext		; weiter mit nächstem/r String/Lücke
+	bcs cwnext		; weiter ...
 	dex			; High Byte
 
 cw2	bne cwnext		; immer (Heap ist nie in Page 1)
-				; weiter mit nächstem/r String/Lücke
 
 ; einen aktiven String nach oben schieben
 
@@ -376,88 +340,56 @@ cwactive			; immer mit Y=1 angesprungen
 cw3	lda #$ff		; Backlink h: als Lücke markieren
 	sta (newptr),y		; Y=1
 	dey			; Y=0
-!ifdef no_opt_3 {
-	lda (descptr),y		; Descriptor: String-Länge
+	lda (descptr),y		; Descriptor: String-länge
 	sta (newptr),y		; Backlink l: Lückenlänge
-} else {
-				; Backlink l: Lückenlänge später beim
-				; Kopieren ...
-}
+
 	lda newptr		; Aufgeräumtzeiger -= String-Länge
-	sbc (descptr),y		; minus String-Länge, immer C=1, Y=0
+	sbc (descptr),y		; immer C=1
 	sta newptr
 	bcs cw4
 	dec newptr+1
 	sec			; für SBC unten
 
-cw4	lda ptr			; Alt-String-Zeiger -= String-Länge
+cw4	iny			; Y=1
+	sta (descptr),y		; String-Adresse L: neue Adresse
+	iny			; Y=2
+	lda newptr+1
+	sta (descptr),y		; String-Adresse H: neue Adresse
+	ldy #0
+	lda ptr
 	sbc (descptr),y		; immer C=1
 	sta ptr			; Arbeitszeiger = alte String-Adresse
 	bcs cw5
 	dec ptr+1
 cw5
-	; An dieser Stelle wäre eine Optimierung möglich, um das
-	; Kopieren zu verhindern, wenn der String an der gleichen
-	; Stelle bleibt - dabei darf die Optimierung #3 nicht
-	; in Verwendung sein und es würden zusätzlich 10 Bytes gebraucht!
-!ifdef opt_no_copy {
-	cmp newptr		; ptr bereits in A
-	bne cw6			; ptr != newptr, also kopieren
-	lda ptr+1		; High Byte ...
-	cmp newptr+1
-	beq cwheapordered	; ptr = newptr, nicht kopieren
-cw6
-}
-
 	lda (descptr),y		; String-Länge
+
 !ifndef use_fast_copy {
 
-				; immer, da Länge >0
-!ifdef no_opt_3 {
-	beq cwnocopy		; falls doch Länge 0, kein Kopieren,
-				; Descriptor trotzdem anpassen ...
-	tay			; als Index, mit Dekrementieren beginnen
-} else { ; mit Optimierung #3
-	tay			; Länge als Index
-	bne cwbllen		; immer, zuerst Backlink-Low-Markierung
-				; mit Lückenlänge belegen
-}
+	beq cwnocopy		; wenn =0, dann nicht kopieren
+	tay			; Länge
 cwloop	dey			; -> Startindex fürs Kopieren
 	lda (ptr),y		; Arbeitszeiger mit altem String
-cwbllen sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
+	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
 	tya			; Test auf Z-Flag!
 	bne cwloop		; Index = 0 -> fertig kopiert
 
-} else { ; use_fast_copy!
+} else {
 
 				; + 3 Byte, -2 T/Zeichen 
-	tay			; Länge als Index
-!ifdef no_opt_3 {
-	bne cwentry		; immer, da Länge in Y>0, bei
-				; Dekrementieren beginnen!
-} else { ; mit Optimierung #3
-	bne cwbllen		; immer, zuerst Backlink-Low-Markierung
-				; mit Lückenlänge belegen
-}
-				; -> Startindex fürs Kopieren
-cwloop	lda (ptr),y		; Arbeitszeiger mit altem String
-cwbllen	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
+	tay			; Länge
+	bne cwentry		; immer, da Länge in Y>0
+cwloop				; -> Startindex fürs Kopieren
+	lda (ptr),y		; Arbeitszeiger mit altem String
+	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
 cwentry	dey			; Test auf Z-Flag!
 	bne cwloop		; Index = 0 -> fertig kopiert
 cwone	lda (ptr),y		; Arbeitszeiger mit altem String
 	sta (newptr),y		; Aufgeräumtzeiger mit neuem String-Ort
+
 }
 
-cwnocopy:
-				; Y=0
-	iny			; Y=1
-	lda newptr		; im Descriptor:
-	sta (descptr),y		; String-Adresse L: neue Adresse
-	iny			; Y=2
-	lda newptr+1
-	sta (descptr),y		; String-Adresse H: neue Adresse
-
-cwheapordered:
+cwnocopy
 	lda ptr
 	ldx ptr+1		; High-Byte immer !=0
 	bne cwnext		; immer; weiter in Schleife
@@ -492,7 +424,7 @@ backlink:
 	cpx strend 
 	bcc blnext		; < Array-Bereichende (außerhalb Heap)?
 
-blsetdesc:
+blsetdesc
 	ldy #1
 	lda ptr+1
 	sta (newptr),y		; Descriptor-Adresse ...
@@ -688,7 +620,7 @@ sa1	lda #$ff		; Backlink H = Markierung "Lücke"
 	rts
 
   } else {
-; alternative, etwas kürzere Variante (-3 T, -2 B)
+; alternative, etwas kürzere Varainte
 
 stralloc:
 	sta strptr		; strptr = A/X = FRETOP
