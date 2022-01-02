@@ -1,0 +1,766 @@
+GARBAGE COLL
+============
+
+2013, J.E. Klasek, johann at klasek.at
+
+
+Diese Implementierung ist von 1988 und wurde als Listing
+in der Zeitschrift 64'er publiziert. Sie orientiert sich an der schon
+mit BASIC 3.0 eingeführten und in BASIC 4, BASIC 3.5 und BASIC 7.0
+etablierten Variante, aber in einer völlig neuen Implementierung mit
+wesentlichen Unterschieden.
+
+In der Originalfassung weist die Implmentierung 2 Bugs auf, die sie
+eigentlich unbrauchbar macht.
+
+Die Implementierung hat das Ziel im ROM die alte GC-Routine zu ersetzen,
+um somit als ROM-Patch in Ersatz-ROMs (BASIC und KERNAL) eingesetzt
+werden kann.
+Natürlich kann die Routine auch in der im RAM liegenen BASIC-Variante
+verwendet werden. Die Patches sind über diverse Stellen im ROM verteilt,
+da der Platz der alten GC-Routine nicht ausreicht. Die Routine verteilt
+sich über 4 Stellen auf beide ROM-Bereiche:
+
+Länge Start     Anmerkung
+---------------------------------------------------------------------
+0146  b4f4      Bereich der Originalroutine mit den Einsprungpunkten
+                $B4F4 für den Allokator und $B526 für die eigentliche
+                Garbage-Collection.
+                3 Bytes von $b63a bis $b63c bleiben unbenutzt
+                (jedoch nicht in der NG-Version).
+0019  e4ba      Unused, for future patches (bis auf 3 Bytes verwendet
+                e4b7 bis e4b9 bleiben ungenutzt)
+0036  e474      " **** COMMODORE 64 BASIC V2 **** 64K RAM SYSTEM"
+                wird überschrieben
+0015  b6c1      Die Routine "Perform String Housekeeping", die bei
+                b6aa beginnt wird bei b6c1 abgeschnitten. Weil
+                die String-Heap-Korrektur hier nicht mehr richtig
+                ist, weil die 2 Bytes das Back-Links nicht
+                berücksichtigt werden.
+                Das führt dazu, das eventuell wieder freizugebende,
+                temporäre Strings des String-Descriptor-Stacks
+                nicht gleich wieder freigegeben werden. Da aber die
+                Garbage-Collection deutlich schneller ist,
+                kann man das dadurch eventuell schnellere Anfüllen
+                des String-Heaps in Kauf nehmen.
+                In der Stand-alone-Version die in $C000 nicht
+                direkt im ROM eingebettet ist, wird eine
+                neue String-House-Keeping-Routine zur Verfügung
+                gestellt.
+---------------------------------------------------------------------
+
+Diese Patches sind allerdings nur mit dem Standard-Kernal vereinbar.
+Zumindest bei der Kernal-Variante für SpeedDOS+ gibt Überschneidungen,
+die zu seltsames Verhalten und Abstürzen führen. Man müsste die Patches
+gegebenenfalls auf die Gegebenheiten des jeweiligen Kernals extra
+anpassen (sofern das überhaupt platzmäßig möglich ist) oder man
+verwendet die Stand-alone-Version.
+
+Besondere Eigenschaften der Garbcol-Implementierung:
+
+ * Der Allokator berücksichtigt eine Anforderung der Länge 0 nicht.
+   Das heißt, es wird auch dabei eine Back-Link-Struktur am Heap
+   angelegt und in String der Länge 256 (den BASIC gar nicht verwalten
+   kann) angelegt. Der Heap würde so in einen undefinierten Zustand
+   geraten, da die GC-Routine mit diesen 256-Byte-Lücken auch nicht
+   umgehen kann.
+   Das entspricht nicht dem Verhalten der ersetzten Standardroutine,
+   die den Zeiger auf den aktuellen Heap-Top retourniert. Allerdings
+   wird in diesem Fall kein Platz am Heap verbraucht.
+
+ * Da die angeforderten Strings bei der Zuweisung von Variablen nicht
+   als belegt gekennzeichnet werden, muss die GC-Routine hier vorab
+   durch alle Strings vom String-Descriptor-Stack, einfachen Variablen
+   und Array-Variablen durchgehen und die Strings in der Back-Link-
+   Struktur als belegt kennzeichnen. Dann erst kann der eigentliche
+   Aufräumprozess starten. Im Zuge dieses Vorgangs wird werden
+   die Strings auch wieder als "nicht belegt" (als Lücke)
+   markiert, da nicht bekannt ist, wann ein String am Heap
+   "aufgegeben" wird.
+
+ * Die Aufräumschleife ist einfacher gestaltet als jene der Standard-
+   CBM-Variante. Es werden nämlich alle Strings an die neue Position
+   kopiert, selbst dann, wenn der String schon an der richtigen Position
+   ist. Die Optimierung bei der Standardroutine, dass bereits der Anfang
+   des Heaps ohne Lücken vorliegt und nicht mehr neue übertragen werden
+   muss, wirkt sich bei diesem Algorithmus dennoch nicht wesentlich aus.
+   Es wird also immer der gesamte aktive String-Heap-Inhalt kopiert -
+   auch wenn es nur an die selbe Stelle ist.
+   Diese Optimierung wird allerdings in der Stand-alone-Version
+   umgesetzt, jedoch in deutlich einfacher und nicht so umständlich
+   gestaltet (analog zur BSOS-8296-Implementierung).
+
+   In der Praxis macht das nicht viel aus. Nur in dem Extremfall, wenn
+   der freie Speicher schon recht klein ist und der Heap durch bereits
+   vorige GC-Aufrufe nahezu bereinigt ist und daher nicht kopiert werden
+   müsste, dann käme es wegen der häufiger stattfindenen GC-Aufrufe
+   beim Verzicht auf das Kopieren bereits richtig liegender Strings
+   zu einer deutlicheren Ersparnis.
+
+Die Orignalversion ist allerdings mit zwei Fehlern behaftet:
+
+ 1) in backlinkarr: C-Flag ist beim Errechnen des Folge-Arrays definiert
+    gelöscht. Sonst werden ev. nicht alle Elemente aller Arrays mit
+    einem korrekten Backlink versehen und der String-Heap wird durch die
+    GC korrumpiert!
+
+ 2) in backlinkarr bei blanext: Muss zum Aufrufer immer mit Z=0
+    rückkehren, und erkennt sonst immer nur das 1. Array! Damit liegen
+    die anderen Strings dann im freien Bereich und werden nach und nach
+    überschrieben!
+
+Die fehlerbereinigte Version ist nahezu perfekt. Stilistisch handelt
+es sich um sehr gut optimierten 6502-Code, der alle sich ergebenden
+Randbedingungen bestmöglich ausnutzt.
+Nur an einer Stelle offenbarte sich ein Optimierungspotential, nämlich
+bei der Kopierroutine, der die Strings an die richtige Stelle
+überträgt. Die NG-Version ist ein experimentelle Version, die
+versucht hier mehr herauszuholen.
+Im Kern der Schleife lässt sich die Abfrage auf die Endbedingung
+(nämlich Y=0 mittels TYA) vermeiden, allerdings zu Lasten der Codelänge,
+die diesen Codeteil von 8 Byte auf 11 Byte ausdehnt. Da gerade 3 Bytes im
+1. Codeblock zur Verfügung stehen, geht sich diese Optimierung exakt
+aus. Allerdings ist in dieser Variante die Abfrage auf String-Länge
+gleich Null weggefallen. Genau genommen kann dieser Fall auch nicht
+eintreten, außer der Descriptor wird irgendwie manipuliert. Außerdem
+ist die Allokatorroutine gar nicht in der Lage Null-Länge-Strings
+anzufordern.
+
+Ein einer experimentellen Fassung der Routine, wo die
+0-Längen-Überprüfung noch vorhanden war, wurde die Codelänge anders
+eingespart, was aber zu Lasten der Laufzeit ging:
+Da bot sich ein Faktorisieren des Inkrementierens des Zeiger ptr an,
+welche an 2 Stellen passiert. Diesen Code auf eine Unterroutine
+auslagern und per JSR aufrufen. Damit reduziert sich der Mehrverbrauch
+dann auf die exakt 3 zur Verfügung stehenden Bytes (Einsparung 2 Bytes).
+Leider hat das ganze auch eine Kehrseite mit dem Nachteil, dass dadurch
+erst recht die Laufzeit erhöht wird. Somit benötigt jeder aktive String
+2 zusätzliche JSR/RTS-Abfolgen, was sich mit 24 Taktzyklen zu Buche
+schlägt. Die Ersparnis der optimierten Kopierschleife wirkt sich somit
+erst bei einer Stringlänge von als 12 Bytes (je Durchlauf 2 Taktzyklen)
+aus. Sonst kommt es immer zu einer Verschlechterung der Laufzeit. Die
+Optimierung wirkt sich nur in gewissen Fällen positiv, sonst aber
+negativ aus! Das zeigen auch die Benchmarks. Solche mit längeren Strings
+wie bei GC-DEMO profitieren von der Optimierung der NG-Version. Die GC-
+STD-TEST mit seinen 1-Byte-Strings wird mit 22 zusätzlichen Takten pro
+aktivem String abgestraft.
+
+In der aktuellen NG-Fassung, ergeben sich aber keine Laufzeiteinbußen,
+allerdings ist der Gewinn in der Laufzeit nur bei sehr intensivem Gebrauch
+der GC zu bemerken, beispielsweise beim "GC-DEMO NG"-Benchmark. Sonst
+fällt die Optimierung faktisch nicht ins Gewicht.
+
+Die Optimierung bezüglich der Kopiervermeidung bei einem aufgeräumten
+Heap, hat selbst in einer sehr kompakten Fassung, wie sie bei der
+BSOS-8296-Implementierung zu finden ist, für die ROM-Patch-Version
+keinen Platz.
+In der Stand-alone-Version, kann der Code an eine beliebige
+Adresse positioniert werden. Dazu muss der lediglich das
+BASIC in dessen ROM-Bereich an 3 Stellen angezapft werden:
+
+ 1. Einsprung in die Allocation-Routine (getspa) $B4F4
+ 2. Einsprung in Garbage-Collection-Routine (garcoll) $B526
+ 3. Code-Ausbruch in der String-Housekeeping-Routine $B6C1
+
+Der Code-Teil für Stelle 3 wird in der ROM-Patch-Version überschrieben
+und die String-Housekeeping-Funktion ist insofern beschnitten, dass der
+Optimierungsfall ausgelassen wird. Dieser besteht darin, dass im Fall,
+dass ein String am String-Descriptor-Stack und am Heap-Top (= Bottom of
+String Space) liegt, gleich wieder entfernt werden kann. In diesem
+Fall muss hier auch der Back-Link entfernt werden (also 2 weitere Bytes
+zusätzlich zur Länge).
+
+
+
+
+
+Dateien
+-------
+
+Makefile		Makefile zum Assemblieren der aktuellen Version
+basic.rom		BASIC-ROM-Image der aktuellen Version
+bugfixed/		Original mit Bugfixes.
+experimental/		Experimentelle Optimierung (wird nicht verwendet)
+garbcol-c000.l		Symbole Standalone-Version ab $C000
+garbcol-c000.o		Object Standalone-Version ab $C000
+garbcol-c000.r		Report Standalone-Version ab $C000
+garbcol.asm		Assembler-Source (für RUN- und Standalone-Version)	
+garbcol.l		Symbole RUN-Version
+garbcol.o		Object RUN-Version
+garbcol.r		Report RUN-Version
+image/			Image-Erstellung und D64-Image
+info.german.txt		Diese Dokumentation.
+kernal.rom		KERNAL-ROM-Image der aktuellen Version
+loader.asm		Loader für RUN-Version
+optimized/		Optimierte Version
+optimized-2/		weitergehend optimierte Version
+orig/			Originale Version (mit Bugs)
+orig-distrib/		Distribution mit den Dateien der Originalversion
+
+
+
+
+
+garbcol.d64-Dateien
+-------------------
+
+image/garbcol.d64
+
+3     "garbcol-c000    "  prg 	Garbcol mit Optimierung als Stand-Alone-Version ab $C000
+3     "garbcol-ng      "  prg 	nur Garbcol mit Optimierung als RUN-Loader
+3     "garbcol         "  prg 	nur Garbcol mit Bugfixes als RUN-Loader
+
+2     "g1              "  prg
+1     "g2              "  prg
+1     "g3              "  prg
+1     "g4              "  prg
+3     "garbage start   "  prg	Erstellt die gepatchten Basic u.
+				Kernal-Images (verwendet
+				garbcol?, svop).
+2     "garbcol1        "  prg
+1     "garbcol2        "  prg
+1     "garbcol3        "  prg
+1     "garbcol4        "  prg
+2     "installation    "  prg	erzeugt aus g1-g4 die Dateien
+				garbcol1-garbcol4
+1     "svop            "  prg	SAVE @ Fix
+
+
+
+
+
+Verwendung
+----------
+
+
+Original
+- - - - 
+
+load "garbage start",8
+run
+
+Nur bei Original 64, funktioniert nicht mit SpeedDOS+ etc.
+MIt anderen ROMs als den originalen ist die Verwendung 
+der Stand-alone-Version garbcol-c000 empfohlen (siehe weiter unten).
+
+Es werden beide ROMs ins RAM kopiert und durch Nachladen gepatcht.
+Ab Zeile 510 werden auch noch diverse Bugs und Komfort-Patches
+eingebracht. Ein größer davon ist der in der Datei SVOP liegende
+SAVE "@" Operator Fix.
+
+Um das dauerhaft zu verwenden, sollte man dann die neuen Images
+von Basic und Kernal anlegen (für neue ROMs z.B.)
+
+Es gibt in der Originalversion keinen Loader, der nur die GC aktiviert.
+
+Erst mit den Versionen mit Bugfixes und Optimierungen hat einen BASIC-Loader
+der mit RUN zu starten ist. Dabei wird nur der Garbage-Collector installiert,
+die anderen Änderungen an BASIC und KERNAL sind nicht inkludiert.
+
+
+
+Run-Version
+- - - - - -
+
+# Originale, fehlerkorrigierte Version:
+
+load "garbcol",8
+run
+
+# fehlerbereinigte, optimierte Version:
+
+load "garbcol-ng",8
+
+
+
+Stand-Alone-Version
+- - - - - - - - - -
+
+load "garbcol-c000",8,1
+new
+sys49152
+
+
+
+
+Bugs
+----
+
+Ein schwerwiegender Bug bewirkt, dass ein Stringarrary korrumpiert wird,
+wenn es mehr als ein Array gibt, da die Berechnung um von einem auf
+das nächste Array fortzuschreiten fehlerhaft ist.
+An einer Stelle fehlt ein CLC und dessen Zustand kann vorher
+beliebige Werte Annehmen. Damit wird das Folgearray um 1 Byte
+versetzt.
+
+; BUG 1: CLC fehlt!
+.C:b6d0   65 58      ADC $58
+
+; BUG 2: Ein Rücksprung wird nicht richtig genommen, sobald
+; es mehr als ein Array gibt!
+
+Das Problem ist bei Programm "GC DEMO NG 11" reproduzierbar sichbar.
+Dort wird ein Probe Array mit 2 Elementen B$() angelegt und dann das
+eigentliche Array A$() für den Benchmark.
+Die Variante "GC DEMO NG 14" umgeht das Problem, indem nur 
+ein Array angelegt wird und dieses sowohl als Probearray als auch
+als Benchmarkarray verwendet wird.
+
+
+
+Bugfix- und Optimierungsversionen
+---------------------------------
+
+Die Bugfix-Version behebt die unter "Bugs" beschriebenen Probleme.
+
+Ein optimierte, sogenannte NG-Version (New Generation) ändert die
+String-Kopierroutine so, dass der Durchlauf für ein Zeichen 2 Takte
+weniger benötigt, allerdings zu Lasten der Code-Größe. Das bringt das
+Problem mit sich, dass die noch 3 in Reserve stehenden Bytes in dem
+Code-Bereich nicht ausreichen. Eine weitere Faktorisierung in der Back-
+Link-Behandlung lagert die Addition des ptr-Zeigers in eine Unterroutine
+aus, womit wieder ausreichend Platz geschaffen wird.
+
+Allerdings führt die Optimierung nicht in allen Fällen zu einer besseren
+Laufzeit. Dort, wo die Strings relativ lang sind, ist eine Verbesserung
+messbar. Beispielsweise bei "GC-DEMO NG", wo als Stresstest die GC durch
+den zunehmend knapper werdenden Speicher immer öfter aufgerufen wird.
+
+Ins andere Extrem fällt etwa "GC-STD-TEST RTC", wo 5000 Strings bestehend
+aus nur einem Zeichen in einem GC-Durchlauf behandelt werden.
+Das String-Kopieren generiert keine Ersparnis, während Back-Link-Behandlung
+durch den zweimaligen Unterprogrammaufruf ( 2* (6+6) ) 24 Takte kostet.
+D.h. die Ersparnis macht sich erst bei Strings mit mehr 12 Zeichen bemerkbar.
+
+Bei "GC-DEMO NG" sind das nur 0,3 % an Verbesserung zu erreichen, während
+es bei "GC-STD-TEST RTC" zu eine Laufzeitverschlechterung um 33 % kommt!
+
+
+
+
+Garbcol-BASIC/KERNAL-Patch
+--------------------------
+
+
+basic.rom	BASIC-Image für EPROM/VICE
+kernal.rom	KERNAL-Image für EPROM/VICE
+
+
+
+Vice 2.2 mit Garbcol-ROMs
+- - - - - - - - - - - - -
+
+# ~/.vice/garbcol-vicerc
+
+[C64]
+KernalName="/home/USER/kernal.rom"
+BasicName="/home/USER/basic.rom"
+
+
+# Script ~/bin/x64garbcol, VICE installiert unter /pd/vice/
+
+#!/bin/sh
+exec /pd/vice/bin/x64 -config $HOME/.vice/garbcol-vicerc "$@"
+
+
+# aufrufen mit
+x64garbcol IMAGE
+
+
+
+
+
+
+Funktion
+--------
+
+
+
+Ab $B6D2 wird die Routine "Perform String Housekeeping" beschnitten.
+
+http://unusedino.de/ec64/technical/aay/c64/romb6a3.htm, $B6AA
+
+Dieser Teil wird überschrieben:
+
+B6C1: D0 13     BNE $B6D6
+B6C3: C4 34     CPY $34       ; Pointer: Bottom of String space
+B6C5: D0 0F     BNE $B6D6
+B6C7: E4 33     CPX $33       ; Pointer: Bottom of String space
+B6C9: D0 0B     BNE $B6D6
+B6CB: 48        PHA
+B6CC: 18        CLC
+B6CD: 65 33     ADC $33       ; Pointer: Bottom of String space
+B6CF: 85 33     STA $33       ; Pointer: Bottom of String space
+B6D1: 90 02     BCC $B6D5
+B6D3: E6 34     INC $34       ; Pointer: Bottom of String space
+
+Das ist jener Teil, der überprüft, ob der aufgerufene Descriptor
+am TOS des SDS liegt und der String auch Top of Heap liegt.
+In diesem Falle wird der Heap ausnahmsweise verkleinert!
+Diese Optimierung für den String-Heap fällt mit GARBCOL weg,
+aber ist auch nicht weiter dramatisch, da zwar der String-Heap
+sich eventuell schneller füllt, aber dieser dann ohnehin mit
+einem linearen Aufwand zusammengeräumt wird.
+
+
+Das ist der Ersatzcode, der aber einen Bug #2 aufweist, nämlich vor $B6D0
+fehlt ein CLC!
+
+.C:b6c1  4C D6 B6    JMP $B6D6
+.C:b6c4  A0 00       LDY #$00
+.C:b6c6  B1 22       LDA ($22),Y
+.C:b6c8  08          PHP
+.C:b6c9  C8          INY
+.C:b6ca  B1 22       LDA ($22),Y
+.C:b6cc  AA          TAX
+.C:b6cd  C8          INY
+.C:b6ce  B1 22       LDA ($22),Y
+.C:b6d0  65 58       ADC $58
+.C:b6d2  4C 75 E4    JMP $E475
+
+
+
+
+
+Listing
+-------
+
+2013-10-11. 2013-10-28 kommentiert von Johann E. Klasek
+
+; garbcol1:
+; d b4f4 b640
+
+;***** Speicher von Stringheap anfordern
+;
+;	IN:	A			; Länge Anforderung
+;		$33/34			; FRETOP
+;	MOD:	$0F			; GC aufgerufen Flag
+;		$35/36			; temp. Zeiger
+;	OUT:	$33/34			; FRETOP
+
+.C:b4f4   46 0F      LSR $0F		; set not collected state
+.C:b4f6   48         PHA		; Länge der Anforderung,
+					; für 2. Teil
+.C:b4f7   49 FF      EOR #$FF		; negieren
+.C:b4f9   38         SEC
+.C:b4fa   65 33      ADC $33
+.C:b4fc   A6 34      LDX $34
+.C:b4fe   B0 02      BCS $B502
+.C:b500   CA         DEX
+.C:b501   38         SEC
+.C:b502   E9 02      SBC #$02		; Platz für Backlink einrechnen
+.C:b504   B0 01      BCS $B507
+.C:b506   CA         DEX
+.C:b507   E4 32      CPX $32		; Stringheap voll (Arraybereich Ende)?
+.C:b509   90 06      BCC $B511
+.C:b50b   D0 13      BNE $B520		; nein, Bereich anfordern
+.C:b50d   C5 31      CMP $31
+.C:b50f   B0 0F      BCS $B520		; nein, Bereich anfordern
+.C:b511   A2 10      LDX #$10
+.C:b513   A5 0F      LDA $0F
+.C:b515   30 BB      BMI $B4D2		; Collection schon gelaufen?
+.C:b517   20 26 B5   JSR $B526		; nein, dann Garbage Collection, C=1 (immer!)
+.C:b51a   66 0F      ROR $0F		; mark collected state, Bit7 gesetzt
+.C:b51c   68         PLA		; Länge angeforderter Bereich
+.C:b51d   4C F6 B4   JMP $B4F6		; nochmal versuchen
+
+.C:b520   20 77 B5   JSR $B577		; FRETOP = A/X
+.C:b523   4C BA E4   JMP $E4BA		; allocate final
+
+;***** GARBAGE COLLECTION
+
+; Backlink aller Stringdescriptorstack Strings setzen
+
+.C:b526   A9 19      LDA #$19		; start adr. string descriptor stack
+.C:b528   A2 00      LDX #$00
+.C:b52a   20 A5 E4   JSR $E4A5		; set $22/$23
+
+.C:b52d   C5 16      CMP $16		; at 1. free SDS element?
+.C:b52f   F0 05      BEQ $B536		; SDS done
+.C:b531   20 E8 B5   JSR $B5E8		; Backlink setzen
+.C:b534   F0 F7      BEQ $B52D		; unbedingt
+
+; Backlink aller Stringvariablen setzen
+
+.C:b536   A9 05      LDA #$05		; Descriptor-Schritt bei Variablen
+.C:b538   85 53      STA $53
+.C:b53a   A5 2D      LDA $2D		; Variablenbeginn
+.C:b53c   A6 2E      LDX $2E
+.C:b53e   20 A5 E4   JSR $E4A5		; 22/23 = A/X
+
+.C:b541   E4 30      CPX $30		; Variablenende?
+.C:b543   D0 04      BNE $B549
+.C:b545   C5 2F      CMP $2F
+.C:b547   F0 05      BEQ $B54E		; ja, weiter mit Arrays
+.C:b549   20 1F B6   JSR $B61F		; Backlink für nächste Stringvariable setzen
+.C:b54c   D0 F3      BNE $B541		; unbedingt
+
+; Backlink aller Stringarrays setzen
+
+.C:b54e   85 58      STA $58		; Variablenbereichende = Arraybereichanfang
+.C:b550   86 59      STX $59
+.C:b552   A0 03      LDY #$03		; Descriptor-Schritt bei Stringarrays
+.C:b554   84 53      STY $53
+
+.C:b556   E4 32      CPX $32		; Arraybereichende?
+.C:b558   D0 04      BNE $B55E
+.C:b55a   C5 31      CMP $31
+.C:b55c   F0 05      BEQ $B563
+.C:b55e   20 C4 B6   JSR $B6C4		; Backlinks für nächstes Stringarray setzen
+.C:b561   D0 F3      BNE $B556		; unbedingt.
+
+.C:b563   A5 37      LDA $37		; MEMTOP
+.C:b565   A6 38      LDX $38
+.C:b567   85 4E      STA $4E		; -> Aufgeräumtzeiger
+.C:b569   86 4F      STX $4F
+
+; Aufräumschleife
+
+.C:b56b   E4 34      CPX $34		; A/X: altes FRETOP erreicht,
+.C:b56d   D0 0D      BNE $B57C		; dann Heap durch und fertig.
+.C:b56f   C5 33      CMP $33		; sonst aufräumen ...
+.C:b571   D0 09      BNE $B57C
+.C:b573   A5 4E      LDA $4E		; Aufgeräumtzeiger ist
+.C:b575   A6 4F      LDX $4F
+.C:b577   85 33      STA $33		; neues FRETOP
+.C:b579   86 34      STX $34
+.C:b57b   60         RTS		; fertig!
+
+; nächsten String "aufräumen" ...
+
+.C:b57c   38         SEC		; Aufräumtzeiger auf Backlink
+.C:b57d   E9 02      SBC #$02
+.C:b57f   B0 01      BCS $B582
+.C:b581   CA         DEX		; A/X -> Backlink
+.C:b582   20 A5 E4   JSR $E4A5		; A/X -> 22/23 (Arbeitszeiger)
+.C:b585   A0 00      LDY #$00
+.C:b587   B1 22      LDA ($22),Y	; Backlink Low oder Lückenlänge
+.C:b589   C8         INY
+.C:b58a   AA         TAX		; -> X
+.C:b58b   B1 22      LDA ($22),Y	; Backlink High
+.C:b58d   C9 FF      CMP #$FF		; String "nicht gebraucht" Markierung
+.C:b58f   90 0D      BCC $B59E		; aktiver String
+.C:b591   8A         TXA		; Lückenlänge
+.C:b592   49 FF      EOR #$FF		; negieren
+.C:b594   65 22      ADC $22		; 22/23 - Lückenlänge
+.C:b596   A6 23      LDX $23
+.C:b598   B0 01      BCS $B59B		; KORR: geht auch gleich nach $B56B
+.C:b59a   CA         DEX		; 
+.C:b59b   4C 6B B5   JMP $B56B		; KORR: BNE $B56B (sollte nie 0 werden können!)
+
+; aktiven String nach oben schieben
+
+.C:b59e   85 60      STA $60		; Descriptor-Adresse
+.C:b5a0   86 5F      STX $5F
+.C:b5a2   A5 4E      LDA $4E		; Aufgeräumtzeiger -= 2
+.C:b5a4   E9 01      SBC #$01		; weil C=0!
+.C:b5a6   85 4E      STA $4E
+.C:b5a8   B0 03      BCS $B5AD
+.C:b5aa   C6 4F      DEC $4F
+.C:b5ac   38         SEC		; Y=1
+
+.C:b5ad   A9 FF      LDA #$FF		; Backlink H: als Lücke markieren
+.C:b5af   91 4E      STA ($4E),Y	; 
+.C:b5b1   88         DEY		; Y=0
+.C:b5b2   B1 5F      LDA ($5F),Y	; Descriptor: Stringlänge
+.C:b5b4   91 4E      STA ($4E),Y	; Backlink L: Lückenlänge
+
+.C:b5b6   A5 4E      LDA $4E		; Aufgeräumtzeiger -= Stringlänge
+.C:b5b8   F1 5F      SBC ($5F),Y	; immer C=1
+.C:b5ba   85 4E      STA $4E
+.C:b5bc   B0 03      BCS $B5C1
+.C:b5be   C6 4F      DEC $4F
+.C:b5c0   38         SEC
+
+.C:b5c1   C8         INY		; Y=1
+.C:b5c2   91 5F      STA ($5F),Y	; Stringadresse L: neue Adresse
+.C:b5c4   C8         INY		; Y=2
+.C:b5c5   A5 4F      LDA $4F
+.C:b5c7   91 5F      STA ($5F),Y	; Stringadresse H: neue Adresse
+.C:b5c9   A0 00      LDY #$00
+.C:b5cb   A5 22      LDA $22
+.C:b5cd   F1 5F      SBC ($5F),Y	; immer C=1
+.C:b5cf   85 22      STA $22		; Arbeitszeiger = alte Stringadresse
+.C:b5d1   B0 02      BCS $B5D5
+.C:b5d3   C6 23      DEC $23
+
+.C:b5d5   B1 5F      LDA ($5F),Y	; Stringlänge=0?
+.C:b5d7   F0 09      BEQ $B5E2		; ja, dann nicht kopieren
+.C:b5d9   A8         TAY		; Länge-1
+
+.C:b5da   88         DEY		; -> Startindex fürs Kopieren
+.C:b5db   B1 22      LDA ($22),Y	; Arbeitszeiger mit altem String
+.C:b5dd   91 4E      STA ($4E),Y	; Aufgeräumtzeiger mit neuem Stringort
+.C:b5df   98         TYA		; Z-Flag!
+.C:b5e0   D0 F8      BNE $B5DA		; Index 0 -> fertig kopiert
+
+.C:b5e2   A5 22      LDA $22
+.C:b5e4   A6 23      LDX $23
+.C:b5e6   D0 83      BNE $B56B		; unbedingt, weiter in Schleife
+
+
+; Backlink setzen
+;
+; 	IN:	22/23	Descriptoradresse
+; 	OUT:	22/23	Descriptoradresse
+;		A/X
+;	DESTROY: 4E/4F
+;	CALLED:	$B531, $B637
+
+.C:b5e8   A0 00      LDY #$00
+.C:b5ea   B1 22      LDA ($22),Y	; Stringlänge
+.C:b5ec   F0 23      BEQ $B611		; fertig, wenn 0
+.C:b5ee   C8         INY
+.C:b5ef   18         CLC
+.C:b5f0   71 22      ADC ($22),Y	; Backlinkposition (am Stringende)
+.C:b5f2   85 4E      STA $4E		; Backlink-Zeiger L
+.C:b5f4   AA         TAX
+.C:b5f5   C8         INY
+.C:b5f6   B1 22      LDA ($22),Y
+.C:b5f8   69 00      ADC #$00
+.C:b5fa   85 4F      STA $4F		; Backlink-Zeiger H
+.C:b5fc   C5 32      CMP $32		; < Arraybereichende (außerhalb Heap)?
+.C:b5fe   90 11      BCC $B611		; ja, denn nächsten String
+.C:b600   D0 04      BNE $B606
+.C:b602   E4 31      CPX $31
+.C:b604   90 0B      BCC $B611		; < Arraybereichende (außerhalb Heap)?
+
+.C:b606   A0 01      LDY #$01
+.C:b608   A5 23      LDA $23
+.C:b60a   91 4E      STA ($4E),Y	; Descriptoradresse ...
+.C:b60c   88         DEY
+.C:b60d   A5 22      LDA $22
+.C:b60f   91 4E      STA ($4E),Y	; in den Backlink übertragen
+
+.C:b611   18         CLC		; nächster String/nächste Variable
+.C:b612   A5 53      LDA $53		; Schrittweite zum nächsten
+.C:b614   65 22      ADC $22		; Descriptor ...
+.C:b616   85 22      STA $22
+.C:b618   90 02      BCC $B61C
+.C:b61a   E6 23      INC $23
+.C:b61c   A6 23      LDX $23
+.C:b61e   60         RTS
+
+; nächste Stringvariable und Backlink setzen
+;
+; 	IN: 22/23	Variablenadresse
+; 	OUT:	22/23	Variablenadresse
+;		A/X
+;	DESTROY: 4E/4F
+;	CALLED: $B549
+
+.C:b61f   A0 00      LDY #$00
+.C:b621   B1 22      LDA ($22),Y	; Variablenname 1. Zeichen
+.C:b623   AA         TAX
+.C:b624   C8         INY
+.C:b625   B1 22      LDA ($22),Y	; Variablenname 2. Zeichen
+.C:b627   A8         TAY
+.C:b628   18         CLC
+.C:b629   A5 22      LDA $22		; Descriptoradresse (in Variable)
+.C:b62b   69 02      ADC #$02
+.C:b62d   85 22      STA $22
+.C:b62f   90 02      BCC $B633
+.C:b631   E6 23      INC $23
+.C:b633   8A         TXA		; Variablen Typ prüfen
+.C:b634   30 DB      BMI $B611		; keine String, nächste Variable
+.C:b636   98         TYA
+.C:b637   30 AF      BMI $B5E8		; Backlink setzen
+.C:b639   10 D6      BPL $B611		; keine Stringvar., nächste Variable
+
+; garbcol4:
+; d b6c1 b6d4
+
+.C:b6c1   4C D6 B6   JMP $B6D6
+
+; nächste Array Variable und Backlink setzen
+;
+; 	IN: 22/23	Arrayadresse
+; 	OUT:	22/23	Adresse Folge-Array
+;		58/59	Adresse Folge-Array
+;		A/X	Adresse Folge-Array
+;	DESTROY: 4E/4F
+;	CALLED: $B55E
+
+.C:b6c4   A0 00      LDY #$00
+.C:b6c6   B1 22      LDA ($22),Y	; Variablenname 1. Zeichen
+.C:b6c8   08         PHP		; für später
+.C:b6c9   C8         INY
+.C:b6ca   B1 22      LDA ($22),Y	; Variablenname 2. Zeichen
+.C:b6cc   AA         TAX		; für später
+.C:b6cd   C8         INY
+.C:b6ce   B1 22      LDA ($22),Y	; Offset nächstes Array
+					; BUG: CLC fehlt!
+.C:b6d0   65 58      ADC $58
+.C:b6d2   4C 75 E4   JMP $E475
+
+; garbcol3:
+; d e474 e4ab
+
+.C:e474   00         BRK		; Einschaltmeldung kürzen
+
+.C:e475   85 58      STA $58		; Folge-Array L
+.C:e477   C8         INY
+.C:e478   B1 22      LDA ($22),Y
+.C:e47a   65 59      ADC $59
+.C:e47c   85 59      STA $59		; Folge-Array H
+.C:e47e   28         PLP		; Arraytyp:
+.C:e47f   30 20      BMI $E4A1		; kein Stringarray
+.C:e481   8A         TXA
+.C:e482   10 1D      BPL $E4A1		; kein Stringarray
+.C:e484   C8         INY		; Y=4
+.C:e485   B1 22      LDA ($22),Y	; Anzahl der Dimensionen
+.C:e487   0A         ASL A		; *2
+.C:e488   69 05      ADC #$05		; + 5 (Var.name+Offset+Dimensionen)
+.C:e48a   65 22      ADC $22		; auf 1. Element ...
+.C:e48c   85 22      STA $22
+.C:e48e   90 02      BCC $E492
+.C:e490   E6 23      INC $23
+.C:e492   A6 23      LDX $23		; positionieren
+
+.C:e494   E4 59      CPX $59		; Arrayende erreicht?
+.C:e496   D0 04      BNE $E49C		; nein, Backlink setzen
+.C:e498   C5 58      CMP $58
+.C:e49a   F0 09      BEQ $E4A5		; Array durch
+
+.C:e49c   20 E8 B5   JSR $B5E8		; Backlink setzen
+.C:e49f   D0 F3      BNE $E494		; unbedingt
+
+.C:e4a1   A5 58      LDA $58		; Arrayzeiger
+.C:e4a3   A6 59      LDX $59
+.C:e4a5   85 22      STA $22		; Arbeitszeiger
+.C:e4a7   86 23      STX $23
+.C:e4a9   60         RTS
+
+;--- $E4B7 - $E4D2 unused ($AA)
+;--- $E4D3 - $E4D9 unused ($AA) bei altem KERNAL,
+;----              Patch for RS232-Routines
+
+; garbcol2:
+; d e4ba e4da
+
+;**** String allocation (Fortsetzung)
+;
+;	IN: 	TOS			; Länge
+;		33/34			; Stringadresse
+;	OUT:	A			; Länge
+;		35/36			; Stringadresse
+;	CALLED:	$B523
+
+.C:e4ba   85 35      STA $35		; 35/36 = A/X = 33/34
+.C:e4bc   86 36      STX $36
+.C:e4be   AA         TAX		; A in X aufheben
+.C:e4bf   68         PLA		; Länge
+.C:e4c0   48         PHA		; wieder auf Stack
+.C:e4c1   A8         TAY		; Index=Länge (Backlink-Position)
+.C:e4c2   91 33      STA ($33),Y	; Backlink L = String-/Lückenlänge
+.C:e4c4   C8         INY		; Y=Len+1
+.C:e4c5   D0 02      BNE $E4C9		; wenn Länge=255, dann
+.C:e4c7   E6 34      INC $34		; Überlauf, aber nur temporär!
+
+.C:e4c9   A9 FF      LDA #$FF		; Backlink H = Markierung "Lücke"
+.C:e4cb   91 33      STA ($33),Y
+.C:e4cd   A4 36      LDY $36
+.C:e4cf   84 34      STY $34		; Überlaufkorr. rückgänig
+.C:e4d1   68         PLA		; Länge vom Stack
+.C:e4d2   60         RTS
+
