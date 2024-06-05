@@ -136,17 +136,17 @@
    134  c528 a9c5               	LDA #>HANDLE1
    135  c52a 8d6eaa             	STA PATCH1+2
    136                          
-   137  c52d a9a2               	LDA #<HANDLE2	; let JSR in place!
+   137  c52d a997               	LDA #<HANDLE2	; let JSR in place!
    138  c52f 8d6bb6             	STA PATCH2+1
    139  c532 a9c5               	LDA #>HANDLE2
    140  c534 8d6cb6             	STA PATCH2+2
    141                          
-   142  c537 a9bb               	LDA #<HANDLE3	; let JSR in place!
+   142  c537 a9b0               	LDA #<HANDLE3	; let JSR in place!
    143  c539 8d27b7             	STA PATCH3+1
    144  c53c a9c5               	LDA #>HANDLE3
    145  c53e 8d28b7             	STA PATCH3+2
    146                          
-   147  c541 a9e1               	LDA #<COLLECT	; Write "JMP COLLECT"
+   147  c541 a9d6               	LDA #<COLLECT	; Write "JMP COLLECT"
    148  c543 8d27b5             	STA GARBCOL+1	; patch code.
    149  c546 a9c5               	LDA #>COLLECT
    150  c548 8d28b5             	STA GARBCOL+2
@@ -167,621 +167,631 @@
    165                          ;	STA ($49),Y
    166                          
    167                          HANDLE1
-   168  c551 c418               	CPY $18		; Descriptor on top of SDS?
-   169  c553 d00a               	BNE +
-   170  c555 c517               	CMP $17
-   171  c557 d006               	BNE +
-   172  c559 8516               	STA $16		; Yes, remove it from SDS
-   173  c55b e903               	SBC #3
-   174  c55d 8517               	STA $17
-   175                          	
-   176                          	; If destination variable points to string on the heap, free it.
-   177                          
-   178  c55f a000               +	LDY #0
-   179                          	; $49 points to variable descriptor (in LET's destination variable)
-   180  c561 b149               	LDA ($49),Y	; Get string length
-   181  c563 f03c               	BEQ LEAVE	; Variable contains no string
-   182  c565 aa                 	TAX		; > 0, save it for later
-   183  c566 c8                 	INY
-   184  c567 b149               	LDA ($49),Y	; String address low
-   185  c569 855a               	STA STR
-   186  c56b c8                 	INY
-   187  c56c b149               	LDA ($49),Y	; String address high
-   188  c56e 855b               	STA STR+1
-   189                          
-   190                          	; Free STR if on heap and return
-   191                          
-   192                          FREE
-   193  c570 a55b               	LDA STR+1	; String address high
-   194  c572 c534               	CMP FRETOP+1	; Heap top high
-   195  c574 902b               	BCC LEAVE	; String below heap (on on heap)
-   196  c576 d008               	BNE ++		; String on heap
-   197  c578 a55a               	LDA STR		; String address low
-   198  c57a c533               	CMP FRETOP	; Heap top low
-   199  c57c 9023               	BCC LEAVE	; Leave when not on heap!
-   200                          
-   201  c57e a55b               	LDA STR+1	; String address greater or equal FRETOP
-   202                          
-   203  c580 c538               ++	CMP MEMEND+1	; String above string memory?
-   204  c582 9008               	BCC +++		; no
-   205  c584 d01b               	BNE LEAVE	; yes
-   206  c586 a55a               	LDA STR		; High byte equal, compare low byte
-   207  c588 c537               	CMP MEMEND
-   208  c58a b015               	BCS LEAVE	; Above heap
-   209                          	
-   210                          	; String on heap: mark it as free
-   211                          
-   212  c58c 8a                 +++	TXA		; Restore length
-   213  c58d c901               	CMP #1		; String of length 1?
-   214  c58f d006               	BNE ++
-   215                          
-   216  c591 a000               	LDY #0
-   217  c593 915a               	STA (STR),Y	; Single byte on heap contains 1
-   218  c595 f00a               	BEQ LEAVE	; leave, always (Z=1)
-   219                          
-   220  c597 a8                 ++	TAY		; Length to Y (> 1!)
-   221  c598 88                 	DEY
-   222  c599 88                 	DEY		; Y: Length - 2
-   223  c59a 915a               	STA (STR),Y	; Pre-last byte of string has length
-   224  c59c c8                 	INY
-   225  c59d a9ff               	LDA #$FF
-   226  c59f 915a               	STA (STR),Y	; Last byte of string with gap-marker
-   227  c5a1 60                 LEAVE	RTS
-   228                          
+   168  c551 20dbb6             	JSR $B6DB	; Remove descriptor if on top
+   169                          ;	CPY $18		; Descriptor on top of SDS?
+   170                          ;	BNE +
+   171                          ;	CMP $17
+   172                          ;	BNE +
+   173                          ;	STA $16		; Yes, remove it from SDS
+   174                          ;	SBC #3
+   175                          ;	STA $17
+   176                          	
+   177                          	; If destination variable points to string on the heap, free it.
+   178                          
+   179  c554 a000               +	LDY #0
+   180                          	; $49 points to variable descriptor (in LET's destination variable)
+   181  c556 b149               	LDA ($49),Y	; Get string length
+   182  c558 f03c               	BEQ LEAVE	; Variable contains no string
+   183  c55a aa                 	TAX		; > 0, save it for later
+   184  c55b c8                 	INY
+   185  c55c b149               	LDA ($49),Y	; String address low
+   186  c55e 855a               	STA STR
+   187  c560 c8                 	INY
+   188  c561 b149               	LDA ($49),Y	; String address high
+   189  c563 855b               	STA STR+1
+   190                          
+   191                          	; Free STR if on heap and return
+   192                          
+   193                          FREE
+   194  c565 a55b               	LDA STR+1	; String address high
+   195  c567 c534               	CMP FRETOP+1	; Heap top high
+   196  c569 902b               	BCC LEAVE	; String below heap (on on heap)
+   197  c56b d008               	BNE ++		; String on heap
+   198  c56d a55a               	LDA STR		; String address low
+   199  c56f c533               	CMP FRETOP	; Heap top low
+   200  c571 9023               	BCC LEAVE	; Leave when not on heap!
+   201                          
+   202  c573 a55b               	LDA STR+1	; String address greater or equal FRETOP
+   203                          
+   204  c575 c538               ++	CMP MEMEND+1	; String above string memory?
+   205  c577 9008               	BCC +++		; no
+   206  c579 d01b               	BNE LEAVE	; yes
+   207  c57b a55a               	LDA STR		; High byte equal, compare low byte
+   208  c57d c537               	CMP MEMEND
+   209  c57f b015               	BCS LEAVE	; Above heap
+   210                          	
+   211                          	; String on heap: mark it as free
+   212                          
+   213  c581 8a                 +++	TXA		; Restore length
+   214  c582 c901               	CMP #1		; String of length 1?
+   215  c584 d006               	BNE ++
+   216                          
+   217  c586 a000               	LDY #0
+   218  c588 915a               	STA (STR),Y	; Single byte on heap contains 1
+   219  c58a f00a               	BEQ LEAVE	; leave, always (Z=1)
+   220                          
+   221  c58c a8                 ++	TAY		; Length to Y (> 1!)
+   222  c58d 88                 	DEY
+   223  c58e 88                 	DEY		; Y: Length - 2
+   224  c58f 915a               	STA (STR),Y	; Pre-last byte of string has length
+   225  c591 c8                 	INY
+   226  c592 a9ff               	LDA #$FF
+   227  c594 915a               	STA (STR),Y	; Last byte of string with gap-marker
+   228  c596 60                 LEAVE	RTS
    229                          
    230                          
-   231                          ; String concatenation: free 2nd argument after copying!
-   232                          
-   233                          ;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space A bytes long
-   234                          ;.,B660 20 7A B6 JSR $B67A       copy string from descriptor to utility pointer
-   235                          ;.,B663 A5 50    LDA $50         get descriptor pointer low byte
-   236                          ;.,B665 A4 51    LDY $51         get descriptor pointer high byte
-   237                          ;.,B667 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of string space
-   238                          ;                                returns with A = length, X = pointer low byte,
-   239                          ;                                Y = pointer high byte
-   240                          ;.,B66A 20 8C B6 JSR $B68C       store string from pointer to utility pointer
-   241                          ;.,B66D A5 6F    LDA $6F         get descriptor pointer low byte
-   242                          ;.,B66F A4 70    LDY $70         get descriptor pointer high byte
-   243                          ;.,B671 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of string space
-   244                          ;                                returns with A = length, X = pointer low byte,
-   245                          ;                                Y = pointer high byte
-   246                          ;.,B674 20 CA B4 JSR $B4CA       check space on descriptor stack then put string address
-   247                          ;                                and length on descriptor stack and update stack pointers
-   248                          ;.,B677 4C B8 AD JMP $ADB8       continue evaluation
-   249                          
-   250                          ; -> 
-   251                          
-   252                          ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
-   253                          ;
-   254                          HANDLE2
-   255  c5a2 208cb6             	JSR $B68C	; Copy string to utility pointer's location
-   256  c5a5 a550               	LDA $50		; Descriptor address of 2nd argument
-   257  c5a7 a451               	LDY $51		; It is never top on heap, so just mark it as free
-   258  c5a9 c516               	CMP $16		; Previously popped element
-   259  c5ab d0f4               	BNE LEAVE
-   260  c5ad c418               	CPY $18		; High byte (normally 0)
-   261  c5af d0f0               	BNE LEAVE
-   262  c5b1 20d2c5             	JSR FREESDS	; mark already remove element from SDS as free
-   263  c5b4 a56f               	LDA $6F
-   264  c5b6 a470               	LDY $70
-   265  c5b8 4cc2c5             	JMP POPSDS	; remove element from SDS and mark as free
-   266                          	
-   267                          
-   268                          ; LEFT$(), RIGHT$(), MID$(): Free input string
-   269                          
-   270                          ;.,B726 20 8C B6 JSR $B68C       store string from pointer to utility pointer
-   271                          ;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put string address
-   272                          ;                                and length on descriptor stack and update stack pointers
-   273                          ; -> 
-   274                          ;.,B726 20 8C B6 JSR HANDLE3     store string from pointer to utility pointer
+   231                          
+   232                          ; String concatenation: free 2nd argument after copying!
+   233                          
+   234                          ;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space
+   235                          ;                                A bytes long
+   236                          ;.,B660 20 7A B6 JSR $B67A       copy string from descriptor to utility pointer
+   237                          ;.,B663 A5 50    LDA $50         get descriptor pointer low byte
+   238                          ;.,B665 A4 51    LDY $51         get descriptor pointer high byte
+   239                          ;.,B667 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
+   240                          ;                                string space returns with A = length, 
+   241                          ;                                X = pointer low byte, Y = pointer high byte
+   242                          ;.,B66A 20 8C B6 JSR $B68C       store string from pointer to utility pointer
+   243                          ;.,B66D A5 6F    LDA $6F         get descriptor pointer low byte
+   244                          ;.,B66F A4 70    LDY $70         get descriptor pointer high byte
+   245                          ;.,B671 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
+   246                          ;                                string space returns with A = length, 
+   247                          ;                                X = pointer low byte, Y = pointer high byte
+   248                          ;.,B674 20 CA B4 JSR $B4CA       check space on descriptor stack then put
+   249                          ;                                string address and length on descriptor stack
+   250                          ;                                and update stack pointers
+   251                          ;.,B677 4C B8 AD JMP $ADB8       continue evaluation
+   252                          
+   253                          ; -> 
+   254                          
+   255                          ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
+   256                          
+   257                          ; Only both or none of the arguments are the SDS. If the 2nd (later pushed)
+   258                          ; element has been popped, the first argument will be on the SDS also.
+   259                          
+   260                          HANDLE2
+   261  c597 208cb6             	JSR $B68C	; Copy 2nd string to utility pointer's location
+   262  c59a a550               	LDA $50		; Descriptor address of 2nd argument
+   263  c59c a451               	LDY $51		; It is never top on heap, so just mark it as free
+   264  c59e c516               	CMP $16		; Previously popped element
+   265  c5a0 d0f4               	BNE LEAVE
+   266  c5a2 c418               	CPY $18		; High byte (normally 0)
+   267  c5a4 d0f0               	BNE LEAVE
+   268  c5a6 20c7c5             	JSR FREESDS	; Mark already remove element from SDS as free
+   269  c5a9 a56f               	LDA $6F		; Descriptor address of the first argument
+   270  c5ab a470               	LDY $70
+   271  c5ad 4cb7c5             	JMP POPSDS	; Remove element from SDS and mark as free
+   272                          	
+   273                          
+   274                          ; LEFT$(), RIGHT$(), MID$(): Free input string
    275                          
-   276                          
-   277                          HANDLE3
-   278                          	; A: length, copy from ($22) to ($35)
-   279  c5bb 208cb6             	JSR $B68C	; Copy string part into allocated space
-   280  c5be a550               	LDA $50
-   281  c5c0 a451               	LDY $51
+   276                          ;.,B726 20 8C B6 JSR $B68C       store string from pointer to utility pointer
+   277                          ;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put
+   278                          ;                                string address and length on descriptor stack
+   279                          ;                                and update stack pointers
+   280                          ; -> 
+   281                          ;.,B726 20 8C B6 JSR HANDLE3     store string from pointer to utility pointer
    282                          
-   283                          	; the string itself is not top of heap, just mark as free and remove from SDS
-   284                          
-   285                          POPSDS
-   286  c5c2 c418               	CPY $18		; Descriptor on top of SDS?
-   287  c5c4 d0db               	BNE LEAVE	; RTS
-   288  c5c6 c517               	CMP $17
-   289  c5c8 d0d7               	BNE LEAVE	; RTS
-   290                          	; free memory and pull from SDS
-   291  c5ca 20d2c5             	JSR FREESDS
-   292  c5cd a517               	LDA $17		; Top elememt on SDS
-   293  c5cf 4ce3b6             	JMP $B6E3	; remove from SDS (A low byte to SDS element)
-   294                          FREESDS
-   295                          	; A/Y is pointer to string descriptor on the SDS!
-   296  c5d2 aa                 	TAX		; Index in zero-page
-   297  c5d3 b501               	LDA 1,X		; String address low
-   298  c5d5 855a               	STA STR
-   299  c5d7 b502               	LDA 2,X		; String address high
-   300  c5d9 855b               	STA STR+1
-   301  c5db b500               	LDA 0,X		; String length
-   302  c5dd aa                 	TAX
-   303  c5de d090               	BNE FREE	; Length X, address STR/STR+1
-   304  c5e0 60                 	RTS		; No free if length = 0!
-   305                          
-   306                          
-   307                          
-   308                          ; *** Garbage Collector
-   309                          
-   310                          COLLECT
-   311                          
-   312                          !ifndef no_indicator {
-   313  c5e1 a200               	LDX #0
-   314  c5e3 8622               	STX CPTR	; Pointer low byte = 0
-   315  c5e5 ae8802             	LDX VIDPAGE	; Startpage of video RAM
-   316                          	!if (>MARKOFF) >= 1 {
-   317  c5e8 e8                 	INX
-   318                          	!if (>MARKOFF) >= 2 {
-   319  c5e9 e8                 	INX
-   320                          	!if (>MARKOFF) >= 3 {
-   321  c5ea e8                 	INX
-   322                          	} } }
-   323                          	; X contains now the page plus the offset's high byte
-   324  c5eb 8623               	STX CPTR+1
-   325  c5ed a0e7               	LDY #<(MARKOFF)
-   326  c5ef b122               	LDA (CPTR),Y	; Activity indicator on screen:
-   327  c5f1 8d1ec8             	STA ORIGVID	; Save current character
-   328  c5f4 a92a               	LDA #MARKCHAR
-   329  c5f6 9122               	STA (CPTR),Y	; Set mark character
-   330  c5f8 ade7db             	LDA MARKCPOS	; Same for the color information
-   331  c5fb 8d1fc8             	STA ORIGCOL	; Save current color
-   332  c5fe a909               	LDA #MARKCOL
-   333  c600 8de7db             	STA MARKCPOS	; Set mark color
-   334                          }
-   335                          
-   336                          
-   337                          
-   338                          ; walk through all strings and reorganize them
-   339                          
-   340                          STAGE1
-   341  c603 38                         SEC             ; Initialize search
-   342                          NEXTSTR
-   343  c604 204cc7             	JSR GETSA
-   344  c607 f057               	BEQ STAGE2      ; No String found anymore
-   345                          			; Address in X/Y, descr. at STRDP + STAT-offset
-   346                          
-   347  c609 c434               	CPY FRETOP+1	; String on heap?
-   348  c60b 90f7               	BCC NEXTSTR	; No, C=0 for GETSA continuation
-   349  c60d d004               	BNE +
-   350  c60f e433               	CPX FRETOP
-   351  c611 90f1               	BCC NEXTSTR	; No, C=0 for GETSA continuation
-   352                          
-   353  c613 865a               +	STX STR		; Start of string which is on heap
-   354  c615 845b               	STY STR+1
-   355  c617 a55d               	LDA LEN
-   356  c619 c901               	CMP #1		; String length 1?
-   357  c61b d019               	BNE ++
-   358                          
-   359                          	; LEN 1: 
-   360                          	;	copy string value into descriptor
-   361                          	;	overwrite string on heap with value 1
-   362                          
-   363  c61d a000               	LDY #0
-   364  c61f b15a               	LDA (STR),Y	; String value
-   365  c621 aa                 	TAX
-   366  c622 a901               	LDA #1		; Marker for string with length 1
-   367  c624 915a               	STA (STR),Y	; Store marker on heap
-   368  c626 a557               	LDA STAT
-   369  c628 4a                 	LSR		; Shift right gives offset, which
-   370  c629 a8                 	TAY		; refers to STRDP leading to the descriptor
-   371  c62a c8                 	INY		; Position string address low byte
-   372  c62b 8a                 	TXA		; String value
-   373  c62c 9122               	STA (STRDP),Y	; Store value in descriptor (low address byte)
-   374  c62e a900               	LDA #0		; Mark for high byte, means on heap string
-   375  c630 c8                 	INY		; String address high byte
-   376  c631 9122               	STA (STRDP),Y	; Set to zero
-   377  c633 18                 	CLC		; Continuation mode for GETSA
-   378  c634 90ce               	BCC NEXTSTR	; Always
-   379                          
-   380                          	; LEN >1:
-   381                          	;	copy backlink bytes to descriptor
-   382                          	;	store descriptor pointer to backlink
-   383                          
-   384  c636 a8                 ++	TAY		; Length
-   385  c637 88                 	DEY		; Index to last byte
-   386  c638 b15a               	LDA (STR),Y
-   387  c63a 48                 	PHA		; Last byte of string
-   388  c63b a623               	LDX STRDP+1
-   389  c63d a557               	LDA STAT
-   390  c63f 4a                 	LSR		; Shift right gives offset to the descriptor
-   391  c640 18                 	CLC
-   392  c641 6522               	ADC STRDP
-   393  c643 9001               	BCC +
-   394  c645 e8                 	INX
-   395  c646 48                 +	PHA		; STRDP + offset low
-   396  c647 8a                 	TXA		; X STRDP + offset high
-   397  c648 915a               	STA (STR),Y	; Back-link high
-   398  c64a 88                 	DEY
-   399  c64b b15a               	LDA (STR),Y	; Pre-last byte string
-   400  c64d aa                 	TAX
-   401  c64e 68                 	PLA		; STRDP + offset low
-   402  c64f 915a               	STA (STR),Y	; Back-link low
-   403  c651 a557               	LDA STAT
-   404  c653 4a                 	LSR		; Shift right gives offset, which
-   405  c654 a8                 	TAY		; refers to STRDP leading to the descriptor
-   406  c655 c8                 	INY		; Skip length byte
-   407  c656 68                 	PLA		; Last byte of string
-   408  c657 9122               	STA (STRDP),Y	; Store into descriptor address low byte
-   409  c659 8a                 	TXA		; Pre-last byte of string
-   410  c65a c8                 	INY		; =2
-   411  c65b 9122               	STA (STRDP),Y	; Store into descriptor address high byte
-   412  c65d 18                 	CLC		; Continuation mode for GETSA
-   413  c65e 90a4               	BCC NEXTSTR	; Always
-   414                          	
-   415                          
-   416                          
-   417                          
-   418                          ; walk through heap, remove gaps and move strings
-   419                          
-   420                          STAGE2
-   421  c660 a438               	LDY MEMEND+1	; Top of memory.
-   422  c662 a637               	LDX MEMEND	; Set new heap top
-   423  c664 8622               	STX NEWHEAP	; to memory end.
-   424  c666 8423               	STY NEWHEAP+1
-   425                          			; Entry point from no-gap part
-   426  c668 8460               LOOP2R	STY PTR+1	; PTR comes from X
-   427  c66a a000               	LDY #0
-   428                          LOOP2
-   429  c66c 8a                 	TXA		; PTR minus 1
-   430  c66d d002               	BNE +
-   431  c66f c660               	DEC PTR+1
-   432  c671 ca                 +	DEX
-   433  c672 865f               -	STX PTR
-   434                          
-   435  c674 e433               	CPX HEAP	; PTR blow top of heap?
-   436  c676 a560               	LDA PTR+1
-   437  c678 e534               	SBC HEAP+1
-   438  c67a b003               	BCS +		; PTR >= HEAP
-   439  c67c 4c00c7             	JMP EXIT2
-   440                          +
-   441  c67f b15f               	LDA (PTR),Y	; Get back-link high
-   442  c681 c901               	CMP #1		; 1-byte gap
-   443  c683 f0e7               	BEQ LOOP2	; Skip it, covered later in stage 3.
-   444                          
-   445  c685 e8                 	INX		; Decrement PTR, but leaving A untouched
-   446  c686 ca                 	DEX		; PTR low = 0?
-   447  c687 d002               	BNE +
-   448  c689 c660               	DEC PTR+1
-   449  c68b ca                 +	DEX		; PTR low
-   450  c68c 865f               	STX PTR
-   451                          
-   452  c68e c9ff               	CMP #$FF	; Gap marker? (length >1)
-   453  c690 d00f               	BNE NOGAP
-   454                          			; Skip gap of a certain length ...
-   455  c692 b15f               	LDA (PTR),Y	; Gap length
-   456  c694 49ff               	EOR #$FF	; A is > 1
-   457                          			; Carry set from CMP above!
-   458  c696 6901               	ADC #1		; Two's complement +1 and +1, -(LEN-1) + PTR -> PTR
-   459                          			; Never 0 because gap length > 1
-   460  c698 655f               	ADC PTR		; C=0 always because -(LEN-1) could never exceed $FF
-   461  c69a aa                 	TAX		; PTR low byte
-   462  c69b b0d5               	BCS -		; Position on last string byte
-   463  c69d c660               	DEC PTR+1	; PTR high byte, always >0
-   464  c69f d0d1               	BNE -		; Always, PTR has string address,
-   465                          			; pointing to last string byte
-   466                          
-   467                          ; We have a backlink to the string:
-   468  c6a1 8559               NOGAP	STA DESC+1	; Backlink high and
-   469  c6a3 b15f               	LDA (PTR),Y	; backlink low is the
-   470  c6a5 8558               	STA DESC	; descriptor address.
-   471                          
-   472  c6a7 b158               	LDA (DESC),Y	; Length from descriptor
-   473  c6a9 49ff               	EOR #$FF
-   474  c6ab 48                 	PHA		; Needed for heap later
-   475  c6ac a660               	LDX PTR+1	; Transfer to STR ...
-   476                          			; Carry clear from CMP #$FF
-   477  c6ae 6903               	ADC #3		; -(LEN-2) + PTR -> PTR
-   478  c6b0 d002               	BNE +		; PTR already in position
-   479                          			; Special case length = 2:
-   480  c6b2 e8                 	INX		; compensate for the high byte decrement
-   481  c6b3 18                 	CLC		; Adding 0 with carry cleared, leaves PTR unchanged.
-   482  c6b4 655f               +	ADC PTR		; Accumulator before add. was in range 0 to FC
-   483                          			; which never sets the carry!
-   484  c6b6 b001               	BCS +
-   485  c6b8 ca                 	DEX		; In case of adding 0 X is already compensated.
-   486  c6b9 865b               +	STX STR+1	; STR points to string start.
-   487  c6bb 855a               	STA STR
-   488                          	
-   489                          	; make space on heap vor LEN bytes
-   490  c6bd 68                 	PLA		; LEN, but only complemented
-   491  c6be 38                 	SEC		; Finalize two's complement (+1 from carry)
-   492  c6bf 6522               	ADC NEWHEAP	; HEAP - LEN -> HEAP
-   493  c6c1 8522               	STA NEWHEAP
-   494  c6c3 b002               	BCS +
-   495  c6c5 c623               	DEC NEWHEAP+1
-   496                          +	
-   497                          	; copy LEN bytes from STR to HEAP
-   498  c6c7 b158               	LDA (DESC),Y	; length from descriptor
-   499  c6c9 a8                 	TAY		; as index
-   500  c6ca 88                 	DEY		; index = length - 2
-   501  c6cb 88                 	DEY
-   502  c6cc f00e               	BEQ +		; 0, nothing to copy
-   503  c6ce 88                 	DEY		; -1, index of last byte
-   504  c6cf f007               	BEQ ++		; No loop if index is 0.
-   505  c6d1 b15a               -	LDA (STR),Y	; Transfer byte 1 to len-1
-   506  c6d3 9122               	STA (NEWHEAP),Y
-   507  c6d5 88                 	DEY
-   508  c6d6 d0f9               	BNE -
-   509  c6d8 b15a               ++	LDA (STR),Y	; transfer byte 0
-   510  c6da 9122               	STA (NEWHEAP),Y
-   511                          +	
-   512                          	; correct descriptor
-   513  c6dc a002               	LDY #2		; Offset in descriptor
-   514  c6de b158               	LDA (DESC),Y	; pre-last string byte 
-   515  c6e0 48                 	PHA		; Save
-   516  c6e1 a523               	LDA NEWHEAP+1
-   517  c6e3 9158               	STA (DESC),Y	; Restore string address low
-   518  c6e5 88                 	DEY
-   519  c6e6 b158               	LDA (DESC),Y	; last string byte
-   520  c6e8 48                 	PHA		; Save
-   521  c6e9 a522               	LDA NEWHEAP	; Restore string address high
-   522  c6eb 9158               	STA (DESC),Y	; Backlink high
-   523                          
-   524  c6ed 88                 	DEY		; Y=0
-   525                          	; Restore string bytes to backlink
-   526  c6ee b158               	LDA (DESC),Y	; Length byte
-   527  c6f0 a8                 	TAY
-   528  c6f1 88                 	DEY		; Index of last string byte
-   529  c6f2 68                 	PLA
-   530  c6f3 9122               	STA (NEWHEAP),Y	; last byte
-   531  c6f5 88                 	DEY
-   532  c6f6 68                 	PLA		
-   533  c6f7 9122               	STA (NEWHEAP),Y	; pre-last byte
-   534                          
-   535  c6f9 a65a               	LDX STR		; PTR low byte in X
-   536  c6fb a45b               	LDY STR+1	; always >0
-   537  c6fd 4c68c6             	JMP LOOP2R	; Loop with set PTR and reset Y
-   538                          	
-   539                          EXIT2
-   540  c700 a522               	LDA NEWHEAP	; Set rebuilt, compacted heap
-   541  c702 8533               	STA HEAP	; as new heap.
-   542  c704 a523               	LDA NEWHEAP+1
-   543  c706 8534               	STA HEAP+1
-   544                          
-   545                          
-   546                          
-   547                          
-   548                          ; Put strings with length 1 (stored in the descriptor) back on heap
-   549                          
-   550                          STAGE3
-   551  c708 38                         SEC             ; Initialize search for GETSA
-   552  c709 24                         !byte $24       ; BIT ZP, skip next instruction
-   553                          NEXT1STR
-   554  c70a 18                 	CLC
-   555  c70b 204cc7             	JSR GETSA
-   556  c70e f022               	BEQ EXIT        ; No String found anymore
-   557                          			; Address in X/Y, descr. at STRDP + STAT-offset
-   558  c710 c65d               	DEC LEN
-   559  c712 d0f6               	BNE NEXT1STR	; Loop if not length 1
-   560  c714 98                 	TYA		; Check string address high byte
-   561  c715 d0f3               	BNE NEXT1STR	; If not zero, string is not on heap!
-   562                          			; Y is always 0.	
-   563  c717 8a                 	TXA		; String addr low is the string byte!
-   564  c718 a633               	LDX HEAP
-   565  c71a d002               	BNE +		; Heap pointer - 1
-   566  c71c c634               	DEC HEAP+1
-   567  c71e ca                 +	DEX		; Low byte used later
-   568  c71f 8633               	STX HEAP
-   569  c721 9133               	STA (HEAP),Y	; stored string byte back to heap
-   570                          
-   571  c723 a557               	LDA STAT
-   572  c725 4a                 	LSR		; Shift right gives offset, which
-   573  c726 a8                 	TAY		; refers to STRDP leading to the descriptor
-   574  c727 c8                 	INY		; Low byte address in descriptor
-   575  c728 8a                 	TXA		; Heap pointer low
-   576  c729 9122               	STA (STRDP),Y	; stored back into descriptor
-   577  c72b c8                 	INY
-   578  c72c a534               	LDA HEAP+1	; Heap pointer high
-   579  c72e 9122               	STA (STRDP),Y	; stored back into descriptor
-   580  c730 d0d8               	BNE NEXT1STR	; Branch always, because high byte >0
-   581                          	
-   582                          
-   583                          ; *** Garbage collection finished
-   584                          
-   585                          EXIT
-   586                          
-   587                          !ifndef no_indicator {
-   588  c732 a200               	LDX #0
-   589  c734 8622                       STX CPTR        ; Pointer low byte = 0
-   590  c736 ae8802                     LDX VIDPAGE     ; Startpage of video RAM
-   591                                  !if (>MARKOFF) >= 1 {
-   592  c739 e8                         INX
-   593                                  !if (>MARKOFF) >= 2 {
-   594  c73a e8                         INX
-   595                                  !if (>MARKOFF) >= 3 {
-   596  c73b e8                         INX
-   597                                  } } }
-   598                                  ; X contains now the page plus the offset's high byte
-   599  c73c 8623                       STX CPTR+1
-   600  c73e a0e7                       LDY #<(MARKOFF)
-   601  c740 ad1ec8                     LDA ORIGVID     ; Clear activation indicator:
-   602  c743 9122                       STA (CPTR),Y    ; restore character on screen
-   603  c745 ad1fc8                     LDA ORIGCOL     ; and its color.
-   604  c748 8de7db                     STA MARKCPOS
-   605                          }
-   606  c74b 60                 	RTS
-   607                          
-   608                          
-   609                          ;
-   610                          ; *** Get String - fetch next string with length > 0
-   611                          ;
-   612                          ; ( C-flag, STAT, STRDP, PTR -> STRDP, LEN, STAT, X, Y, Z-flag )
-   613                          ; 
-   614                          ; STAT >> 1 -> offset to descriptor relative to pointer STRDP.
-   615                          ;
-   616                          ; If C=1 start from the beginning at SDS, otherwise
-   617                          ; continue with position STRDP and string status STAT.
-   618                          ; If the Z-Flag is set no string is available,
-   619                          ; otherwise X/Y contains the address and LEN
-   620                          ; the length of the string.
-   621                          
-   622  c74c 905b               GETSA   BCC CHECKTYPE   ; C=0 -> continue with string according to STAT
-   623                                                  ; otherwise start with at SDS ...
-   624                          
-   625                          ; *** Look up String Descriptor Stack (SDS): TOSS to TSSP
-   626                          ;
-   627                          ;    +-------------+
-   628                          ;    |             V
-   629                          ;    |    belegt->|<-frei
-   630                          ;   +-+     +-----+-----+-----+
-   631                          ;   | |     |S|L|H|S|L|H|S|L|H|
-   632                          ;   +-+     +-----+-----+-----+
-   633                          ;    ^       ^     ^     ^     ^
-   634                          ;    $16     $19   $1C   $1F   $22
-   635                          ;    TSSP    TOSS
-   636                          
-   637                          DESCSTACK
-   638  c74e a000               	LDY #0
-   639  c750 8423               	STY STRDP+1	; Zero descriptor pointer high
-   640  c752 a900               	LDA #STAT_SDS	; Set status to SDS
-   641  c754 8557               	STA STAT
-   642  c756 a219               	LDX #TOSS	; Start of SDS
-   643  c758 d005               	BNE ISDSTEND	; branch always
-   644  c75a a622               DSTACK	LDX STRDP
-   645  c75c e8                 NEXTDST	INX		; next descriptor
-   646  c75d e8                 	INX
-   647  c75e e8                 	INX
-   648                          ISDSTEND
-   649  c75f e416               	CPX TSSP	; SDS finished?
-   650  c761 f011               	BEQ VARS
-   651  c763 b500               	LDA 0,X		; Check string length
-   652  c765 f0f5               	BEQ NEXTDST
-   653  c767 855d               	STA LEN		; Return variables:
-   654  c769 8622               	STX STRDP	; length, descriptor address
-   655  c76b b502               	LDA 2,X		; String address high
-   656  c76d a8                 	TAY
-   657  c76e b501               	LDA 1,X		; String address low
-   658  c770 aa                 	TAX
-   659  c771 a55d               	LDA LEN		; Always not zero, Z=0
-   660  c773 60                 	RTS		; Returns address in X/Y
-   661                          
-   662                          ; *** Look up simple variables: VARTAB to ARYTAB
-   663                          
-   664  c774 a52d               VARS	LDA VARTAB	; Begin of variables
-   665  c776 a62e               	LDX VARTAB+1
-   666  c778 8522               	STA STRDP
-   667  c77a 8623               	STX STRDP+1
-   668  c77c a004               	LDY #STAT_VAR	; Set status to variables
-   669  c77e 8457               	STY STAT
-   670  c780 d00b               	BNE ISVAREND	; Branch always
-   671                          VAR
-   672  c782 18                 NEXTVAR	CLC		; Next variable
-   673  c783 a522               	LDA STRDP
-   674  c785 6907               	ADC #7		; Advance to next variable
-   675  c787 8522               	STA STRDP
-   676  c789 9002               	BCC ISVAREND
-   677  c78b e623               	INC STRDP+1	; Overflow high byte
-   678                          ISVAREND
-   679  c78d c52f               	CMP ARYTAB
-   680  c78f d006               	BNE CHECKVAR
-   681  c791 a623               	LDX STRDP+1	; Variable end (=array start)?
-   682  c793 e430               	CPX ARYTAB+1
-   683  c795 f01d               	BEQ ARRAYS	; Variable end reached, proceed with arrays
-   684                          CHECKVAR
-   685  c797 a000               	LDY #0		; Variable name
-   686  c799 b122               	LDA (STRDP),Y	; 1st character, type in bit 7 
-   687  c79b 30e5               	BMI NEXTVAR	; No string, to next variable
-   688  c79d c8                 	INY
-   689  c79e b122               	LDA (STRDP),Y	; 2nd character, type in bit 7
-   690  c7a0 10e0               	BPL NEXTVAR	; No string, to next variable
-   691  c7a2 c8                 	INY
-   692  c7a3 b122               	LDA (STRDP),Y	; String length
-   693  c7a5 f0db               	BEQ NEXTVAR	; = 0, to next variable
-   694  c7a7 d063               	BNE RETGETSA
-   695                          
-   696                          CHECKTYPE
-   697  c7a9 a557               	LDA STAT	; GETSA intro with C=0
-   698  c7ab c901               	CMP #STAT_ARY	; String status?
-   699  c7ad f042               	BEQ ARRAY	; =1 -> arrays
-   700  c7af b0d1               	BCS VAR		; =4 -> variables
-   701  c7b1 4c5ac7             	JMP DSTACK	; =0 -> SDS
-   702                          
-   703                          ; *** Look up arrays: ARYTAB to STREND
-   704                          
-   705  c7b4 855f               ARRAYS	STA PTR		; A/X set from simple variable processing,
-   706  c7b6 8660               	STX PTR+1	; pointing the start of arrays.
-   707  c7b8 a001               	LDY #STAT_ARY
-   708  c7ba 8457               	STY STAT	; Set status to arrays
-   709                          ISARREND
-   710  c7bc a55f               	LDA PTR
-   711  c7be a660               	LDX PTR+1
-   712  c7c0 e432               CHKAEND	CPX STREND+1	; End of array area?
-   713  c7c2 d004                       BNE NEXTARR
-   714  c7c4 c531               	CMP STREND	; High byte matches, low byte is
-   715                          			; less or equal.
-   716  c7c6 f051               	BEQ NOSTRING	; Arrays finished -> no string
-   717                          NEXTARR
-   718                          			; Carry always cleared because of CPX/CMP
-   719  c7c8 8522               	STA STRDP	; Start of an array
-   720  c7ca 8623               	STX STRDP+1
-   721  c7cc a000               	LDY #0
-   722  c7ce b122               	LDA (STRDP),Y	; Array name
-   723  c7d0 aa                 	TAX		; Array type, keep it for later
-   724  c7d1 c8                 	INY
-   725  c7d2 b122               	LDA (STRDP),Y
-   726  c7d4 08                 	PHP		; Array type 2nd part, keep also
-   727  c7d5 c8                 	INY
-   728  c7d6 b122               	LDA (STRDP),Y	; Offset to next array
-   729  c7d8 655f               	ADC PTR		; C-flag is cleared (because of CMP/CPX above)
-   730  c7da 855f               	STA PTR		; Save start of following array
-   731  c7dc c8                 	INY
-   732  c7dd b122               	LDA (STRDP),Y
-   733  c7df 6560               	ADC PTR+1
-   734  c7e1 8560               	STA PTR+1
-   735  c7e3 28                 	PLP		; Fetch array type
-   736  c7e4 10d6               	BPL ISARREND	; Not a string array
-   737  c7e6 8a                 	TXA		; Fetch array type 2nd part
-   738  c7e7 30d3               	BMI ISARREND	; Not string array
-   739  c7e9 c8                 	INY
-   740  c7ea b122               	LDA (STRDP),Y	; Number of dimensions
-   741  c7ec 0a                 	ASL		; *2
-   742  c7ed 6905               	ADC #5		; Offset = dimensions*2+5
-   743                          			; C=0 as long as dim.. <= 125
-   744  c7ef d003               	BNE ADVDESC	; Branch always
-   745                          ARRAY			; Entry on continuation
-   746                          NEXTASTR
-   747  c7f1 18                 	CLC
-   748  c7f2 a903               	LDA #3		; String descriptor length
-   749  c7f4 6522               ADVDESC	ADC STRDP	; Advance to next string
-   750  c7f6 8522               	STA STRDP
-   751  c7f8 9002               	BCC +
-   752  c7fa e623               	INC STRDP+1	; Overflow high byte
-   753  c7fc c55f               +	CMP PTR		; All array elements processed?
-   754  c7fe d006               	BNE IS0ASTR
-   755  c800 a623               	LDX STRDP+1
-   756  c802 e460               	CPX PTR+1
-   757  c804 f0ba               	BEQ CHKAEND	; A/X = PTR, check for end of  array area
-   758                          IS0ASTR
-   759  c806 a000               	LDY #0
-   760  c808 b122               	LDA (STRDP),Y	; String length
-   761  c80a f0e5               	BEQ NEXTASTR	; Next array element
-   762                          RETGETSA
-   763  c80c 855d               	STA LEN		; Return value: length
-   764  c80e c8                 	INY
-   765  c80f b122               	LDA (STRDP),Y	; String address low
-   766  c811 aa                 	TAX
-   767  c812 c8                 	INY
-   768  c813 b122               	LDA (STRDP),Y	; String address high
-   769  c815 a8                 	TAY
-   770  c816 a55d               	LDA LEN		; Always not zero, Z=0
-   771  c818 60                 	RTS		; Return address in X/Y
-   772                          NOSTRING
-   773  c819 a900               	LDA #0		; Length 0 
-   774  c81b 855d               	STA LEN		; No string found
-   775  c81d 60                 	RTS		; Z=1
-   776                          
-   777                          
-   778                          
-   779                          
-   780                          !ifndef no_indicator {
-   781  c81e 00                 ORIGVID !byte 0		; Original character of marker position
-   782  c81f 00                 ORIGCOL !byte 0		; Original color of marker position
-   783                          }
-   784                          
-   785                          
+   283                          HANDLE3
+   284                          	; A: length, copy from ($22) to ($35)
+   285  c5b0 208cb6             	JSR $B68C	; Copy string part into allocated space
+   286  c5b3 a550               	LDA $50
+   287  c5b5 a451               	LDY $51
+   288                          
+   289                          	; the string itself is not top of heap, just mark as free
+   290                          	; and remove from SDS
+   291                          
+   292                          POPSDS
+   293  c5b7 c418               	CPY $18		; Descriptor on top of SDS?
+   294  c5b9 d0db               	BNE LEAVE	; RTS
+   295  c5bb c517               	CMP $17
+   296  c5bd d0d7               	BNE LEAVE	; RTS
+   297                          	; free memory and pull from SDS
+   298  c5bf 20c7c5             	JSR FREESDS	; Carry = 1 CMP above, left untouched after JSR
+   299  c5c2 a517               	LDA $17		; Top element on SDS
+   300  c5c4 4ce3b6             	JMP $B6E3	; Remove from SDS (A has low byte to SDS element)
+   301                          			; Carry flag must be set on entry.
+   302                          FREESDS
+   303                          	; A/Y is pointer to string descriptor on the SDS!
+   304  c5c7 aa                 	TAX		; Index in zero-page
+   305  c5c8 b501               	LDA 1,X		; String address low
+   306  c5ca 855a               	STA STR
+   307  c5cc b502               	LDA 2,X		; String address high
+   308  c5ce 855b               	STA STR+1
+   309  c5d0 b500               	LDA 0,X		; String length
+   310  c5d2 aa                 	TAX
+   311  c5d3 d090               	BNE FREE	; Length X, address STR/STR+1
+   312  c5d5 60                 	RTS		; No free if length = 0!
+   313                          
+   314                          
+   315                          
+   316                          ; *** Garbage Collector
+   317                          
+   318                          COLLECT
+   319                          
+   320                          !ifndef no_indicator {
+   321  c5d6 a200               	LDX #0
+   322  c5d8 8622               	STX CPTR	; Pointer low byte = 0
+   323  c5da ae8802             	LDX VIDPAGE	; Startpage of video RAM
+   324                          	!if (>MARKOFF) >= 1 {
+   325  c5dd e8                 	INX
+   326                          	!if (>MARKOFF) >= 2 {
+   327  c5de e8                 	INX
+   328                          	!if (>MARKOFF) >= 3 {
+   329  c5df e8                 	INX
+   330                          	} } }
+   331                          	; X contains now the page plus the offset's high byte
+   332  c5e0 8623               	STX CPTR+1
+   333  c5e2 a0e7               	LDY #<(MARKOFF)
+   334  c5e4 b122               	LDA (CPTR),Y	; Activity indicator on screen:
+   335  c5e6 8d13c8             	STA ORIGVID	; Save current character
+   336  c5e9 a92a               	LDA #MARKCHAR
+   337  c5eb 9122               	STA (CPTR),Y	; Set mark character
+   338  c5ed ade7db             	LDA MARKCPOS	; Same for the color information
+   339  c5f0 8d14c8             	STA ORIGCOL	; Save current color
+   340  c5f3 a909               	LDA #MARKCOL
+   341  c5f5 8de7db             	STA MARKCPOS	; Set mark color
+   342                          }
+   343                          
+   344                          
+   345                          
+   346                          ; walk through all strings and reorganize them
+   347                          
+   348                          STAGE1
+   349  c5f8 38                         SEC             ; Initialize search
+   350                          NEXTSTR
+   351  c5f9 2041c7             	JSR GETSA
+   352  c5fc f057               	BEQ STAGE2      ; No String found anymore
+   353                          			; Address in X/Y, descr. at STRDP + STAT-offset
+   354                          
+   355  c5fe c434               	CPY FRETOP+1	; String on heap?
+   356  c600 90f7               	BCC NEXTSTR	; No, C=0 for GETSA continuation
+   357  c602 d004               	BNE +
+   358  c604 e433               	CPX FRETOP
+   359  c606 90f1               	BCC NEXTSTR	; No, C=0 for GETSA continuation
+   360                          
+   361  c608 865a               +	STX STR		; Start of string which is on heap
+   362  c60a 845b               	STY STR+1
+   363  c60c a55d               	LDA LEN
+   364  c60e c901               	CMP #1		; String length 1?
+   365  c610 d019               	BNE ++
+   366                          
+   367                          	; LEN 1: 
+   368                          	;	copy string value into descriptor
+   369                          	;	overwrite string on heap with value 1
+   370                          
+   371  c612 a000               	LDY #0
+   372  c614 b15a               	LDA (STR),Y	; String value
+   373  c616 aa                 	TAX
+   374  c617 a901               	LDA #1		; Marker for string with length 1
+   375  c619 915a               	STA (STR),Y	; Store marker on heap
+   376  c61b a557               	LDA STAT
+   377  c61d 4a                 	LSR		; Shift right gives offset, which
+   378  c61e a8                 	TAY		; refers to STRDP leading to the descriptor
+   379  c61f c8                 	INY		; Position string address low byte
+   380  c620 8a                 	TXA		; String value
+   381  c621 9122               	STA (STRDP),Y	; Store value in descriptor (low address byte)
+   382  c623 a900               	LDA #0		; Mark for high byte, means on heap string
+   383  c625 c8                 	INY		; String address high byte
+   384  c626 9122               	STA (STRDP),Y	; Set to zero
+   385  c628 18                 	CLC		; Continuation mode for GETSA
+   386  c629 90ce               	BCC NEXTSTR	; Always
+   387                          
+   388                          	; LEN >1:
+   389                          	;	copy backlink bytes to descriptor
+   390                          	;	store descriptor pointer to backlink
+   391                          
+   392  c62b a8                 ++	TAY		; Length
+   393  c62c 88                 	DEY		; Index to last byte
+   394  c62d b15a               	LDA (STR),Y
+   395  c62f 48                 	PHA		; Last byte of string
+   396  c630 a623               	LDX STRDP+1
+   397  c632 a557               	LDA STAT
+   398  c634 4a                 	LSR		; Shift right gives offset to the descriptor
+   399  c635 18                 	CLC
+   400  c636 6522               	ADC STRDP
+   401  c638 9001               	BCC +
+   402  c63a e8                 	INX
+   403  c63b 48                 +	PHA		; STRDP + offset low
+   404  c63c 8a                 	TXA		; X STRDP + offset high
+   405  c63d 915a               	STA (STR),Y	; Back-link high
+   406  c63f 88                 	DEY
+   407  c640 b15a               	LDA (STR),Y	; Pre-last byte string
+   408  c642 aa                 	TAX
+   409  c643 68                 	PLA		; STRDP + offset low
+   410  c644 915a               	STA (STR),Y	; Back-link low
+   411  c646 a557               	LDA STAT
+   412  c648 4a                 	LSR		; Shift right gives offset, which
+   413  c649 a8                 	TAY		; refers to STRDP leading to the descriptor
+   414  c64a c8                 	INY		; Skip length byte
+   415  c64b 68                 	PLA		; Last byte of string
+   416  c64c 9122               	STA (STRDP),Y	; Store into descriptor address low byte
+   417  c64e 8a                 	TXA		; Pre-last byte of string
+   418  c64f c8                 	INY		; =2
+   419  c650 9122               	STA (STRDP),Y	; Store into descriptor address high byte
+   420  c652 18                 	CLC		; Continuation mode for GETSA
+   421  c653 90a4               	BCC NEXTSTR	; Always
+   422                          	
+   423                          
+   424                          
+   425                          
+   426                          ; walk through heap, remove gaps and move strings
+   427                          
+   428                          STAGE2
+   429  c655 a438               	LDY MEMEND+1	; Top of memory.
+   430  c657 a637               	LDX MEMEND	; Set new heap top
+   431  c659 8622               	STX NEWHEAP	; to memory end.
+   432  c65b 8423               	STY NEWHEAP+1
+   433                          			; Entry point from no-gap part
+   434  c65d 8460               LOOP2R	STY PTR+1	; PTR comes from X
+   435  c65f a000               	LDY #0
+   436                          LOOP2
+   437  c661 8a                 	TXA		; PTR minus 1
+   438  c662 d002               	BNE +
+   439  c664 c660               	DEC PTR+1
+   440  c666 ca                 +	DEX
+   441  c667 865f               -	STX PTR
+   442                          
+   443  c669 e433               	CPX HEAP	; PTR below top of heap?
+   444  c66b a560               	LDA PTR+1
+   445  c66d e534               	SBC HEAP+1
+   446  c66f b003               	BCS +		; PTR >= HEAP
+   447  c671 4cf5c6             	JMP EXIT2
+   448                          +
+   449  c674 b15f               	LDA (PTR),Y	; Get back-link high
+   450  c676 c901               	CMP #1		; 1-byte gap
+   451  c678 f0e7               	BEQ LOOP2	; Skip it, covered later in stage 3.
+   452                          
+   453  c67a e8                 	INX		; Decrement PTR, but leaving A untouched
+   454  c67b ca                 	DEX		; PTR low = 0?
+   455  c67c d002               	BNE +
+   456  c67e c660               	DEC PTR+1
+   457  c680 ca                 +	DEX		; PTR low
+   458  c681 865f               	STX PTR
+   459                          
+   460  c683 c9ff               	CMP #$FF	; Gap marker? (length >1)
+   461  c685 d00f               	BNE NOGAP
+   462                          			; Skip gap of a certain length ...
+   463  c687 b15f               	LDA (PTR),Y	; Gap length
+   464  c689 49ff               	EOR #$FF	; A is > 1
+   465                          			; Carry set from CMP above!
+   466  c68b 6901               	ADC #1		; Two's complement +1 and +1, -(LEN-1) + PTR -> PTR
+   467                          			; Never 0 because gap length > 1
+   468  c68d 655f               	ADC PTR		; C=0 always because -(LEN-1) could never exceed $FF
+   469  c68f aa                 	TAX		; PTR low byte
+   470  c690 b0d5               	BCS -		; Position on last string byte
+   471  c692 c660               	DEC PTR+1	; PTR high byte, always >0
+   472  c694 d0d1               	BNE -		; Always, PTR has string address,
+   473                          			; pointing to last string byte
+   474                          
+   475                          ; We have a backlink to the string:
+   476  c696 8559               NOGAP	STA DESC+1	; Backlink high and
+   477  c698 b15f               	LDA (PTR),Y	; backlink low is the
+   478  c69a 8558               	STA DESC	; descriptor address.
+   479                          
+   480  c69c b158               	LDA (DESC),Y	; Length from descriptor
+   481  c69e 49ff               	EOR #$FF
+   482  c6a0 48                 	PHA		; Needed for heap later
+   483  c6a1 a660               	LDX PTR+1	; Transfer to STR ...
+   484                          			; Carry clear from CMP #$FF
+   485  c6a3 6903               	ADC #3		; -(LEN-2) + PTR -> PTR
+   486  c6a5 d002               	BNE +		; PTR already in position
+   487                          			; Special case length = 2:
+   488  c6a7 e8                 	INX		; compensate for the high byte decrement
+   489  c6a8 18                 	CLC		; Adding 0 with carry cleared, leaves PTR unchanged.
+   490  c6a9 655f               +	ADC PTR		; Accumulator before add. was in range 0 to FC
+   491                          			; which never sets the carry!
+   492  c6ab b001               	BCS +
+   493  c6ad ca                 	DEX		; In case of adding 0 X is already compensated.
+   494  c6ae 865b               +	STX STR+1	; STR points to string start.
+   495  c6b0 855a               	STA STR
+   496                          	
+   497                          	; make space on heap vor LEN bytes
+   498  c6b2 68                 	PLA		; LEN, but only complemented
+   499  c6b3 38                 	SEC		; Finalize two's complement (+1 from carry)
+   500  c6b4 6522               	ADC NEWHEAP	; HEAP - LEN -> HEAP
+   501  c6b6 8522               	STA NEWHEAP
+   502  c6b8 b002               	BCS +
+   503  c6ba c623               	DEC NEWHEAP+1
+   504                          +	
+   505                          	; copy LEN-2 bytes from STR to HEAP, the
+   506                          	; remaining bytes are restored from the descriptor later!
+   507  c6bc b158               	LDA (DESC),Y	; length from descriptor
+   508  c6be a8                 	TAY		; as index
+   509  c6bf 88                 	DEY		; index = length - 2
+   510  c6c0 88                 	DEY
+   511  c6c1 f00e               	BEQ +		; 0, nothing to copy
+   512  c6c3 88                 	DEY		; -1, index of last byte
+   513  c6c4 f007               	BEQ ++		; No loop if index is 0.
+   514  c6c6 b15a               -	LDA (STR),Y	; Transfer byte 1 to len-1
+   515  c6c8 9122               	STA (NEWHEAP),Y
+   516  c6ca 88                 	DEY
+   517  c6cb d0f9               	BNE -
+   518  c6cd b15a               ++	LDA (STR),Y	; transfer byte 0
+   519  c6cf 9122               	STA (NEWHEAP),Y
+   520                          +	
+   521                          	; correct descriptor
+   522  c6d1 a002               	LDY #2		; Offset in descriptor
+   523  c6d3 b158               	LDA (DESC),Y	; pre-last string byte 
+   524  c6d5 48                 	PHA		; Save
+   525  c6d6 a523               	LDA NEWHEAP+1
+   526  c6d8 9158               	STA (DESC),Y	; Restore string address low
+   527  c6da 88                 	DEY
+   528  c6db b158               	LDA (DESC),Y	; last string byte
+   529  c6dd 48                 	PHA		; Save
+   530  c6de a522               	LDA NEWHEAP	; Restore string address high
+   531  c6e0 9158               	STA (DESC),Y	; Backlink high
+   532                          
+   533  c6e2 88                 	DEY		; Y=0
+   534                          	; Restore string bytes to backlink
+   535  c6e3 b158               	LDA (DESC),Y	; Length byte
+   536  c6e5 a8                 	TAY
+   537  c6e6 88                 	DEY		; Index of last string byte
+   538  c6e7 68                 	PLA
+   539  c6e8 9122               	STA (NEWHEAP),Y	; last byte
+   540  c6ea 88                 	DEY
+   541  c6eb 68                 	PLA		
+   542  c6ec 9122               	STA (NEWHEAP),Y	; pre-last byte
+   543                          
+   544  c6ee a65a               	LDX STR		; PTR low byte in X
+   545  c6f0 a45b               	LDY STR+1	; always >0
+   546  c6f2 4c5dc6             	JMP LOOP2R	; Loop with set PTR and reset Y
+   547                          	
+   548                          EXIT2
+   549  c6f5 a522               	LDA NEWHEAP	; Set rebuilt, compacted heap
+   550  c6f7 8533               	STA HEAP	; as new heap.
+   551  c6f9 a523               	LDA NEWHEAP+1
+   552  c6fb 8534               	STA HEAP+1
+   553                          
+   554                          
+   555                          
+   556                          
+   557                          ; Put strings (from the heap) with length 1 (stored in the descriptor) 
+   558                          ; back on heap. These strings has been marked in a special way.
+   559                          
+   560                          STAGE3
+   561  c6fd 38                         SEC             ; Initialize search for GETSA
+   562  c6fe 24                         !byte $24       ; BIT ZP, skip next instruction
+   563                          NEXT1STR
+   564  c6ff 18                 	CLC		; Continue GETSA from last position
+   565  c700 2041c7             	JSR GETSA
+   566  c703 f022               	BEQ EXIT        ; No String found anymore
+   567                          			; Address in X/Y, descr. at STRDP + STAT-offset
+   568  c705 c65d               	DEC LEN
+   569  c707 d0f6               	BNE NEXT1STR	; Loop if not length 1
+   570  c709 98                 	TYA		; Check string address high byte
+   571  c70a d0f3               	BNE NEXT1STR	; If not zero, string is not on heap!
+   572                          			; Y is always 0.	
+   573  c70c 8a                 	TXA		; String addr low is the string byte!
+   574  c70d a633               	LDX HEAP
+   575  c70f d002               	BNE +		; Heap pointer - 1
+   576  c711 c634               	DEC HEAP+1
+   577  c713 ca                 +	DEX		; Low byte used later
+   578  c714 8633               	STX HEAP
+   579  c716 9133               	STA (HEAP),Y	; Stored string byte back to heap
+   580                          
+   581  c718 a557               	LDA STAT
+   582  c71a 4a                 	LSR		; Shift right gives offset, which
+   583  c71b a8                 	TAY		; refers to STRDP leading to the descriptor
+   584  c71c c8                 	INY		; Low byte address in descriptor
+   585  c71d 8a                 	TXA		; Heap pointer low
+   586  c71e 9122               	STA (STRDP),Y	; stored back into descriptor
+   587  c720 c8                 	INY
+   588  c721 a534               	LDA HEAP+1	; Heap pointer high
+   589  c723 9122               	STA (STRDP),Y	; stored back into descriptor
+   590  c725 d0d8               	BNE NEXT1STR	; Branch always, because high byte >0
+   591                          	
+   592                          
+   593                          ; *** Garbage collection finished
+   594                          
+   595                          EXIT
+   596                          
+   597                          !ifndef no_indicator {
+   598  c727 a200               	LDX #0
+   599  c729 8622                       STX CPTR        ; Pointer low byte = 0
+   600  c72b ae8802                     LDX VIDPAGE     ; Startpage of video RAM
+   601                                  !if (>MARKOFF) >= 1 {
+   602  c72e e8                         INX
+   603                                  !if (>MARKOFF) >= 2 {
+   604  c72f e8                         INX
+   605                                  !if (>MARKOFF) >= 3 {
+   606  c730 e8                         INX
+   607                                  } } }
+   608                                  ; X contains now the page plus the offset's high byte
+   609  c731 8623                       STX CPTR+1
+   610  c733 a0e7                       LDY #<(MARKOFF)
+   611  c735 ad13c8                     LDA ORIGVID     ; Clear activation indicator:
+   612  c738 9122                       STA (CPTR),Y    ; restore character on screen
+   613  c73a ad14c8                     LDA ORIGCOL     ; and its color.
+   614  c73d 8de7db                     STA MARKCPOS
+   615                          }
+   616  c740 60                 	RTS
+   617                          
+   618                          
+   619                          ;
+   620                          ; *** Get String - fetch next string with length > 0
+   621                          ;
+   622                          ; ( C-flag, STAT, STRDP, PTR -> STRDP, LEN, STAT, X, Y, Z-flag )
+   623                          ; 
+   624                          ; STAT >> 1 -> offset to descriptor relative to pointer STRDP.
+   625                          ;
+   626                          ; If C=1 start from the beginning at SDS, otherwise
+   627                          ; continue with position STRDP and string status STAT.
+   628                          ; If the Z-Flag is set no string is available,
+   629                          ; otherwise X/Y contains the address and LEN
+   630                          ; the length of the string.
+   631                          
+   632  c741 905b               GETSA   BCC CHECKTYPE   ; C=0 -> continue with string according to STAT
+   633                                                  ; otherwise start with at SDS ...
+   634                          
+   635                          ; *** Look up String Descriptor Stack (SDS): TOSS to TSSP
+   636                          ;
+   637                          ;    +-------------+
+   638                          ;    |             V
+   639                          ;    |    belegt->|<-frei
+   640                          ;   +-+     +-----+-----+-----+
+   641                          ;   | |     |S|L|H|S|L|H|S|L|H|
+   642                          ;   +-+     +-----+-----+-----+
+   643                          ;    ^       ^     ^     ^     ^
+   644                          ;    $16     $19   $1C   $1F   $22
+   645                          ;    TSSP    TOSS
+   646                          
+   647                          DESCSTACK
+   648  c743 a000               	LDY #0
+   649  c745 8423               	STY STRDP+1	; Zero descriptor pointer high
+   650  c747 a900               	LDA #STAT_SDS	; Set status to SDS
+   651  c749 8557               	STA STAT
+   652  c74b a219               	LDX #TOSS	; Start of SDS
+   653  c74d d005               	BNE ISDSTEND	; branch always
+   654  c74f a622               DSTACK	LDX STRDP
+   655  c751 e8                 NEXTDST	INX		; next descriptor
+   656  c752 e8                 	INX
+   657  c753 e8                 	INX
+   658                          ISDSTEND
+   659  c754 e416               	CPX TSSP	; SDS finished?
+   660  c756 f011               	BEQ VARS
+   661  c758 b500               	LDA 0,X		; Check string length
+   662  c75a f0f5               	BEQ NEXTDST
+   663  c75c 855d               	STA LEN		; Return variables:
+   664  c75e 8622               	STX STRDP	; length, descriptor address
+   665  c760 b502               	LDA 2,X		; String address high
+   666  c762 a8                 	TAY
+   667  c763 b501               	LDA 1,X		; String address low
+   668  c765 aa                 	TAX
+   669  c766 a55d               	LDA LEN		; Always not zero, Z=0
+   670  c768 60                 	RTS		; Returns address in X/Y
+   671                          
+   672                          ; *** Look up simple variables: VARTAB to ARYTAB
+   673                          
+   674  c769 a52d               VARS	LDA VARTAB	; Begin of variables
+   675  c76b a62e               	LDX VARTAB+1
+   676  c76d 8522               	STA STRDP
+   677  c76f 8623               	STX STRDP+1
+   678  c771 a004               	LDY #STAT_VAR	; Set status to variables
+   679  c773 8457               	STY STAT
+   680  c775 d00b               	BNE ISVAREND	; Branch always
+   681                          VAR
+   682  c777 18                 NEXTVAR	CLC		; Next variable
+   683  c778 a522               	LDA STRDP
+   684  c77a 6907               	ADC #7		; Advance to next variable
+   685  c77c 8522               	STA STRDP
+   686  c77e 9002               	BCC ISVAREND
+   687  c780 e623               	INC STRDP+1	; Overflow high byte
+   688                          ISVAREND
+   689  c782 c52f               	CMP ARYTAB
+   690  c784 d006               	BNE CHECKVAR
+   691  c786 a623               	LDX STRDP+1	; Variable end (=array start)?
+   692  c788 e430               	CPX ARYTAB+1
+   693  c78a f01d               	BEQ ARRAYS	; Variable end reached, proceed with arrays
+   694                          CHECKVAR
+   695  c78c a000               	LDY #0		; Variable name
+   696  c78e b122               	LDA (STRDP),Y	; 1st character, type in bit 7 
+   697  c790 30e5               	BMI NEXTVAR	; No string, to next variable
+   698  c792 c8                 	INY
+   699  c793 b122               	LDA (STRDP),Y	; 2nd character, type in bit 7
+   700  c795 10e0               	BPL NEXTVAR	; No string, to next variable
+   701  c797 c8                 	INY
+   702  c798 b122               	LDA (STRDP),Y	; String length
+   703  c79a f0db               	BEQ NEXTVAR	; = 0, to next variable
+   704  c79c d063               	BNE RETGETSA
+   705                          
+   706                          CHECKTYPE
+   707  c79e a557               	LDA STAT	; GETSA intro with C=0
+   708  c7a0 c901               	CMP #STAT_ARY	; String status?
+   709  c7a2 f042               	BEQ ARRAY	; =1 -> arrays
+   710  c7a4 b0d1               	BCS VAR		; =4 -> variables
+   711  c7a6 4c4fc7             	JMP DSTACK	; =0 -> SDS
+   712                          
+   713                          ; *** Look up arrays: ARYTAB to STREND
+   714                          
+   715  c7a9 855f               ARRAYS	STA PTR		; A/X set from simple variable processing,
+   716  c7ab 8660               	STX PTR+1	; pointing the start of arrays.
+   717  c7ad a001               	LDY #STAT_ARY
+   718  c7af 8457               	STY STAT	; Set status to arrays
+   719                          ISARREND
+   720  c7b1 a55f               	LDA PTR
+   721  c7b3 a660               	LDX PTR+1
+   722  c7b5 e432               CHKAEND	CPX STREND+1	; End of array area?
+   723  c7b7 d004                       BNE NEXTARR
+   724  c7b9 c531               	CMP STREND	; High byte matches, low byte is
+   725                          			; less or equal.
+   726  c7bb f051               	BEQ NOSTRING	; Arrays finished -> no string
+   727                          NEXTARR
+   728                          			; Carry always cleared because of CPX/CMP
+   729  c7bd 8522               	STA STRDP	; Start of an array
+   730  c7bf 8623               	STX STRDP+1
+   731  c7c1 a000               	LDY #0
+   732  c7c3 b122               	LDA (STRDP),Y	; Array name
+   733  c7c5 aa                 	TAX		; Array type, keep it for later
+   734  c7c6 c8                 	INY
+   735  c7c7 b122               	LDA (STRDP),Y
+   736  c7c9 08                 	PHP		; Array type 2nd part, keep also
+   737  c7ca c8                 	INY
+   738  c7cb b122               	LDA (STRDP),Y	; Offset to next array
+   739  c7cd 655f               	ADC PTR		; C-flag is cleared (because of CMP/CPX above)
+   740  c7cf 855f               	STA PTR		; Save start of following array
+   741  c7d1 c8                 	INY
+   742  c7d2 b122               	LDA (STRDP),Y
+   743  c7d4 6560               	ADC PTR+1
+   744  c7d6 8560               	STA PTR+1
+   745  c7d8 28                 	PLP		; Fetch array type
+   746  c7d9 10d6               	BPL ISARREND	; Not a string array
+   747  c7db 8a                 	TXA		; Fetch array type 2nd part
+   748  c7dc 30d3               	BMI ISARREND	; Not string array
+   749  c7de c8                 	INY
+   750  c7df b122               	LDA (STRDP),Y	; Number of dimensions
+   751  c7e1 0a                 	ASL		; *2
+   752  c7e2 6905               	ADC #5		; Offset = dimensions*2+5
+   753                          			; C=0 as long as dim.. <= 125
+   754  c7e4 d003               	BNE ADVDESC	; Branch always
+   755                          ARRAY			; Entry on continuation
+   756                          NEXTASTR
+   757  c7e6 18                 	CLC
+   758  c7e7 a903               	LDA #3		; String descriptor length
+   759  c7e9 6522               ADVDESC	ADC STRDP	; Advance to next string
+   760  c7eb 8522               	STA STRDP
+   761  c7ed 9002               	BCC +
+   762  c7ef e623               	INC STRDP+1	; Overflow high byte
+   763  c7f1 c55f               +	CMP PTR		; All array elements processed?
+   764  c7f3 d006               	BNE IS0ASTR
+   765  c7f5 a623               	LDX STRDP+1
+   766  c7f7 e460               	CPX PTR+1
+   767  c7f9 f0ba               	BEQ CHKAEND	; A/X = PTR, check for end of  array area
+   768                          IS0ASTR
+   769  c7fb a000               	LDY #0
+   770  c7fd b122               	LDA (STRDP),Y	; String length
+   771  c7ff f0e5               	BEQ NEXTASTR	; Next array element
+   772                          RETGETSA
+   773  c801 855d               	STA LEN		; Return value: length
+   774  c803 c8                 	INY
+   775  c804 b122               	LDA (STRDP),Y	; String address low
+   776  c806 aa                 	TAX
+   777  c807 c8                 	INY
+   778  c808 b122               	LDA (STRDP),Y	; String address high
+   779  c80a a8                 	TAY
+   780  c80b a55d               	LDA LEN		; Always not zero, Z=0
+   781  c80d 60                 	RTS		; Return address in X/Y
+   782                          NOSTRING
+   783  c80e a900               	LDA #0		; Length 0 
+   784  c810 855d               	STA LEN		; No string found
+   785  c812 60                 	RTS		; Z=1
+   786                          
+   787                          
+   788                          
+   789                          
+   790                          !ifndef no_indicator {
+   791  c813 00                 ORIGVID !byte 0		; Original character of marker position
+   792  c814 00                 ORIGCOL !byte 0		; Original color of marker position
+   793                          }
+   794                          
+   795                          

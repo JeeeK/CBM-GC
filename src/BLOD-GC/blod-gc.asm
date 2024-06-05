@@ -165,13 +165,14 @@ CPYROM	LDA (CPTR),Y	; Read from ROM
 ;	STA ($49),Y
 
 HANDLE1
-	CPY $18		; Descriptor on top of SDS?
-	BNE +
-	CMP $17
-	BNE +
-	STA $16		; Yes, remove it from SDS
-	SBC #3
-	STA $17
+	JSR $B6DB	; Remove descriptor if on top
+;	CPY $18		; Descriptor on top of SDS?
+;	BNE +
+;	CMP $17
+;	BNE +
+;	STA $16		; Yes, remove it from SDS
+;	SBC #3
+;	STA $17
 	
 	; If destination variable points to string on the heap, free it.
 
@@ -254,10 +255,10 @@ LEAVE	RTS
 ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
 
 ; Only both or none of the arguments are the SDS. If the 2nd (later pushed)
-; element has been poped, the first argument will be on the SDS also.
+; element has been popped, the first argument will be on the SDS also.
 
 HANDLE2
-	JSR $B68C	; Copy string to utility pointer's location
+	JSR $B68C	; Copy 2nd string to utility pointer's location
 	LDA $50		; Descriptor address of 2nd argument
 	LDY $51		; It is never top on heap, so just mark it as free
 	CMP $16		; Previously popped element

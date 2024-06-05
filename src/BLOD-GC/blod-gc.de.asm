@@ -165,13 +165,14 @@ CPYROM	LDA (CPTR),Y	; ROM lesen
 ;	STA ($49),Y
 
 HANDLE1
-	CPY $18		; Descriptor auf SDS-Top?
-	BNE +
-	CMP $17
-	BNE +
-	STA $16		; Ja, dann vom SDS entfernen
-	SBC #3
-	STA $17
+	JSR $B6DB	; Wenn on-top, von Stack entfernen
+;	CPY $18		; Descriptor auf SDS-Top?
+;	BNE +
+;	CMP $17
+;	BNE +
+;	STA $16		; Ja, dann vom SDS entfernen
+;	SBC #3
+;	STA $17
 	
 	; Wenn die Zielvariable auf einen String am Heap zeigt, dann freigeben.
 
@@ -257,7 +258,7 @@ LEAVE	RTS
 ; (das später auf dem SDS gelangte) am SDS ist, dann ist das erste auch dort.
 
 HANDLE2
-	JSR $B68C	; Kopiere String zur Hilfszeigerposition
+	JSR $B68C	; Kopiere 2. String zur Hilfszeigerposition
 	LDA $50		; Descriptor-Adresse des zweiten Arguments
 	LDY $51		; Kann nicht mehr am Heap sein, also als frei markieren,
 	CMP $16		; wenn es das zuvor entfernte Element war
