@@ -5,7 +5,7 @@
 # ACME cross-assembler environment
 #
 
-VERSION=1.0-rel1-2021-04-25
+VERSION=1.2-rel1-2024-06-09
 
 # Start address (note $ quoting)
 START = $$C500

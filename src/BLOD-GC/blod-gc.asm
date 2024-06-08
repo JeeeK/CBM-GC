@@ -3,7 +3,8 @@
 ; *  BACKLINK GARBAGE  COLLECTION  *
 ; *        from Johann Klasek      *
 ; *        j AT klasek DOT at      *
-; *       2021-03-30 VERS. 1.1     *
+; *            2021-03-30          *
+; *       2024-06-09 VERS. 1.2     *
 ; **********************************
 ;
 ; Collects unused (garbage) strings on the string heap,
@@ -165,7 +166,7 @@ CPYROM	LDA (CPTR),Y	; Read from ROM
 ;	STA ($49),Y
 
 HANDLE1
-	JSR $B6DB	; Remove descriptor if on top
+	JSR $B6DB	; Remove descriptor if on top, corresponds to:
 ;	CPY $18		; Descriptor on top of SDS?
 ;	BNE +
 ;	CMP $17
@@ -173,10 +174,10 @@ HANDLE1
 ;	STA $16		; Yes, remove it from SDS
 ;	SBC #3
 ;	STA $17
+;+	LDY #0
 	
 	; If destination variable points to string on the heap, free it.
 
-+	LDY #0
 	; $49 points to variable descriptor (in LET's destination variable)
 	LDA ($49),Y	; Get string length
 	BEQ LEAVE	; Variable contains no string
@@ -229,21 +230,23 @@ LEAVE	RTS
 
 
 
-; String concatenation: free 2nd argument after copying!
+; String concatenation: 2nd argument is freed before copying!
 
 ;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space
 ;                                A bytes long
-;.,B660 20 7A B6 JSR $B67A       copy string from descriptor to utility pointer
-;.,B663 A5 50    LDA $50         get descriptor pointer low byte
-;.,B665 A4 51    LDY $51         get descriptor pointer high byte
-;.,B667 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
-;                                string space returns with A = length, 
+;.,B660 20 7A B6 JSR $B67A       copy first string from descriptor to utility pointer
+;.,B663 A5 50    LDA $50         get second string's descriptor pointer low byte
+;.,B665 A4 51    LDY $51         get second string's descriptor pointer high byte
+;.,B667 20 AA B6 JSR $B6AA       pop (YA) 2nd descriptor off stack or from top of
+;                                string space returns with A = length,
 ;                                X = pointer low byte, Y = pointer high byte
-;.,B66A 20 8C B6 JSR $B68C       store string from pointer to utility pointer
-;.,B66D A5 6F    LDA $6F         get descriptor pointer low byte
-;.,B66F A4 70    LDY $70         get descriptor pointer high byte
+;  >>>>>>>>>>>>>>>>>>>>>>>       PATCH here ...
+;.,B66A 20 8C B6 JSR $B68C       store 2nd string from pointer to utility pointer
+;  <<<<<<<<<<<<<<<<<<<<<<<
+;.,B66D A5 6F    LDA $6F         get first string's descriptor pointer low byte
+;.,B66F A4 70    LDY $70         get first string's descriptor pointer high byte
 ;.,B671 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
-;                                string space returns with A = length, 
+;                                string space returns with A = length,
 ;                                X = pointer low byte, Y = pointer high byte
 ;.,B674 20 CA B4 JSR $B4CA       check space on descriptor stack then put
 ;                                string address and length on descriptor stack
@@ -254,26 +257,31 @@ LEAVE	RTS
 
 ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
 
-; Only both or none of the arguments are the SDS. If the 2nd (later pushed)
-; element has been popped, the first argument will be on the SDS also.
+; Both arguments, or just one or none might lay on the SDS, e.g. if one
+; of the operands is a string variable, its descriptor is used directly.
+;
+; On entry the first string is already copied.
 
 HANDLE2
 	JSR $B68C	; Copy 2nd string to utility pointer's location
 	LDA $50		; Descriptor address of 2nd argument
 	LDY $51		; It is never top on heap, so just mark it as free
-	CMP $16		; Previously popped element
-	BNE LEAVE
+	CMP $16		; Previously popped element if it was on the SDS
+	BNE +
 	CPY $18		; High byte (normally 0)
-	BNE LEAVE
+	BNE +
 	JSR FREESDS	; Mark already remove element from SDS as free
-	LDA $6F		; Descriptor address of the first argument
++	LDA $6F		; Descriptor address of the first argument
 	LDY $70
 	JMP POPSDS	; Remove element from SDS and mark as free
-	
+
+
 
 ; LEFT$(), RIGHT$(), MID$(): Free input string
 
+;  >>>>>>>>>>>>>>>>>>>>>>>       PATCH here ...
 ;.,B726 20 8C B6 JSR $B68C       store string from pointer to utility pointer
+;  <<<<<<<<<<<<<<<<<<<<<<<
 ;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put
 ;                                string address and length on descriptor stack
 ;                                and update stack pointers

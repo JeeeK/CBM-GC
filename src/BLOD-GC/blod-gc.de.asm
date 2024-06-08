@@ -3,7 +3,8 @@
 ; *  BACKLINK GARBAGE  COLLECTION  *
 ; *        von  Johann Klasek      *
 ; *        j AT klasek DOT at      *
-; *       2021-03-30 VERS. 1.1     *
+; *            2021-03-30          *
+; *       2024-06-09 VERS. 1.2     *
 ; **********************************
 ;
 ; Räumt Stringspeicher auf, indem Lücken von unbenutzten String
@@ -156,16 +157,16 @@ CPYROM	LDA (CPTR),Y	; ROM lesen
 
 ; *** Handle Patch 1: LET variable overwrite
 ;
-; Hooks at AA6C
-; Replacing:
-;	JSR $B6DB	; Remove only from SDS, but keep string on heap!
-; Continues at AA6F:
+; Hakt ein bei $AA6C
+; Ersetzt:
+;	JSR $B6DB	; Nur von SDS entfernen, aber lässt den String am Heap!
+; Setzt fort bei $AA6F:
 ;	LDY #$00
 ;	LDA ($50),Y
 ;	STA ($49),Y
 
 HANDLE1
-	JSR $B6DB	; Wenn on-top, von Stack entfernen
+	JSR $B6DB	; Wenn on-top, von Stack entfernen, entspricht:
 ;	CPY $18		; Descriptor auf SDS-Top?
 ;	BNE +
 ;	CMP $17
@@ -173,10 +174,10 @@ HANDLE1
 ;	STA $16		; Ja, dann vom SDS entfernen
 ;	SBC #3
 ;	STA $17
-	
+;+	LDY #0
+
 	; Wenn die Zielvariable auf einen String am Heap zeigt, dann freigeben.
 
-+	LDY #0
 	; $49 zeigt auf den Variablen-Descriptor (in der LET-Zielvariable)
 	LDA ($49),Y	; String-Länge
 	BEQ LEAVE	; Variable enthält keinen String-Wert
@@ -229,19 +230,21 @@ LEAVE	RTS
 
 
 
-; String-Addition: Zweites Argument nach dem Kopieren!
+; String-Addition: Zweites Argument wird vor dem Kopieren freigegeben!
 
 ;.,B65D 20 75 B4 JSR $B475       copy descriptor pointer and make string space
 ;                                A bytes long
-;.,B660 20 7A B6 JSR $B67A       copy string from descriptor to utility pointer
-;.,B663 A5 50    LDA $50         get descriptor pointer low byte
-;.,B665 A4 51    LDY $51         get descriptor pointer high byte
-;.,B667 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
+;.,B660 20 7A B6 JSR $B67A       copy first string from descriptor to utility pointer
+;.,B663 A5 50    LDA $50         get second string's descriptor pointer low byte
+;.,B665 A4 51    LDY $51         get second string's descriptor pointer high byte
+;.,B667 20 AA B6 JSR $B6AA       pop (YA) 2nd descriptor off stack or from top of
 ;                                string space returns with A = length,
 ;                                X = pointer low byte, Y = pointer high byte
-;.,B66A 20 8C B6 JSR $B68C       store string from pointer to utility pointer
-;.,B66D A5 6F    LDA $6F         get descriptor pointer low byte
-;.,B66F A4 70    LDY $70         get descriptor pointer high byte
+;  >>>>>>>>>>>>>>>>>>>>>>>	 PATCH here ...
+;.,B66A 20 8C B6 JSR $B68C       store 2nd string from pointer to utility pointer
+;  <<<<<<<<<<<<<<<<<<<<<<<
+;.,B66D A5 6F    LDA $6F         get first string's descriptor pointer low byte
+;.,B66F A4 70    LDY $70         get first string's descriptor pointer high byte
 ;.,B671 20 AA B6 JSR $B6AA       pop (YA) descriptor off stack or from top of
 ;                                string space returns with A = length,
 ;                                X = pointer low byte, Y = pointer high byte
@@ -254,26 +257,31 @@ LEAVE	RTS
 
 ;.,B66A 20 8C B6 JSR HANDLE2     store string from pointer to utility pointer
 
-; Entweder beide Argumente oder keines sind auf dem SDS. Wenn das zweite Argument
-; (das später auf dem SDS gelangte) am SDS ist, dann ist das erste auch dort.
+; Beide Argumente, eines oder keines können auf dem SDS liegen, z. B. wenn
+; einer der Operatoren eine String-Variable ist, denn wird direkt dieser
+; Descriptor verwendet.
+; Beim Eintritt ist der 1. String bereits kopiert.
 
 HANDLE2
 	JSR $B68C	; Kopiere 2. String zur Hilfszeigerposition
 	LDA $50		; Descriptor-Adresse des zweiten Arguments
 	LDY $51		; Kann nicht mehr am Heap sein, also als frei markieren,
-	CMP $16		; wenn es das zuvor entfernte Element war
-	BNE LEAVE
+	CMP $16		; wenn es das zuvor entfernte Element am SDS war
+	BNE +
 	CPY $18		; High-Byte (immer 0)
-	BNE LEAVE
+	BNE +
 	JSR FREESDS	; Das bereits am SDS entfernte Element als frei markieren
-	LDA $6F		; Descriptor-Adresse des ersten Arguments
++	LDA $6F		; Descriptor-Adresse des ersten Arguments
 	LDY $70
 	JMP POPSDS	; Elemente entfernen und als frei markieren
-	
+
+
 
 ; LEFT$(), RIGHT$(), MID$(): Eingabe-String freigeben
 
+;  >>>>>>>>>>>>>>>>>>>>>>>	 PATCH here ...
 ;.,B726 20 8C B6 JSR $B68C       store string from pointer to utility pointer
+;  <<<<<<<<<<<<<<<<<<<<<<<
 ;.,B729 4C CA B4 JMP $B4CA       check space on descriptor stack then put string
 ;                                address and length on descriptor stack and update
 ;                                stack pointers
