@@ -15,7 +15,7 @@ Because the hooks needs patching the interpreter this is easily achieved on C64 
 * [Source+Binaries (BLOD-GC)](src/BLOD-GC)
 * [D64 image (BLOD-GC)](images/blodgc-2024-distrib.d64)
 
-Attention: Major bugfix in as of 2024-06-09: string concatenation might lead to a currupted string heap in previous version. Do not use any old version.
+Attention: Major bugfix as of 2024-06-09: string concatenation might lead to a currupted string heap in previous version. Do not use any old versions.
 
 
 ## Super Garbage Collection
